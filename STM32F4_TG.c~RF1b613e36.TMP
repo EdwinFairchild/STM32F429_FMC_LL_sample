@@ -1,0 +1,815 @@
+#include <stm32f4xx_ll_bus.h>
+#include <stm32f4xx_ll_gpio.h>
+#include <stm32f4xx_ll_utils.h>
+#include <stm32f4xx_ll_pwr.h>
+#include <stm32f4xx_ll_rcc.h>
+#include <stm32f4xx_ll_system.h>
+#include <stm32f4xx_ll_cortex.h>
+#include <stm32f4xx_ll_usart.h>
+#include <stm32f4xx_ll_fmc.h>
+#include <stm32f4xx_ll_spi.h>
+#include "stdarg.h"
+#include "stdlib.h"
+#include "stdio.h"
+#include "string.h"
+
+//---------| F4 Peripheral Driver
+#include "stm32f4xx_ltdc.h"
+#include "fonts.h"
+#include "rgb565_240x320.h"
+//#include "ltdc.h"
+#include "stm32f4xx_ltdc.h"
+//-------------------| SDRAM DEFINES |---------------------------------------------
+//MODE register definitions
+#define SDRAM_MODEREG_BURST_LENGTH_1             ((uint16_t)0x0000)
+#define SDRAM_MODEREG_BURST_LENGTH_2             ((uint16_t)0x0001)
+#define SDRAM_MODEREG_BURST_LENGTH_4             ((uint16_t)0x0002)
+#define SDRAM_MODEREG_BURST_LENGTH_8             ((uint16_t)0x0004)
+#define SDRAM_MODEREG_BURST_TYPE_SEQUENTIAL      ((uint16_t)0x0000)
+#define SDRAM_MODEREG_BURST_TYPE_INTERLEAVED     ((uint16_t)0x0008)
+#define SDRAM_MODEREG_CAS_LATENCY_2              ((uint16_t)0x0020)
+#define SDRAM_MODEREG_CAS_LATENCY_3              ((uint16_t)0x0030)
+#define SDRAM_MODEREG_OPERATING_MODE_STANDARD    ((uint16_t)0x0000)
+#define SDRAM_MODEREG_WRITEBURST_MODE_PROGRAMMED ((uint16_t)0x0000) 
+#define SDRAM_MODEREG_WRITEBURST_MODE_SINGLE     ((uint16_t)0x0200)  
+
+#define EXTERNAL_SDRAM_SIZE				0x400000
+#define EXTERNAL_SDRAM_BANK_ADDR		((uint32_t)0xD0000000)
+#define EXTERNAL_SDRAM_CAS_LATENCY		FMC_SDRAM_CAS_LATENCY_3
+#define SDCLOCK_PERIOD					FMC_SDRAM_CLOCK_PERIOD_2 
+#define EXTERNAL_SDRAM_READBURST		FMC_SDRAM_RBURST_DISABLE 
+
+//-------------------| SPI |-------------------------------------------------------
+#define LCD_SPI_SCK_PIN               LL_GPIO_PIN_7                     /* PF.07 */
+#define LCD_SPI_SCK_GPIO_PORT         GPIOF                          /* GPIOF */
+#define LCD_SPI_SCK_GPIO_CLK          RCC_AHB1ENR_GPIOFEN  
+#define LCD_SPI_SCK_SOURCE            GPIO_PinSource7
+#define LCD_SPI_SCK_AF                GPIO_AF_SPI5
+#define LCD_SPI_MISO_PIN              LL_GPIO_PIN_8                     /* PF.08 */
+#define LCD_SPI_MISO_GPIO_PORT        GPIOF                          /* GPIOF */
+#define LCD_SPI_MISO_GPIO_CLK         RCC_AHB1Periph_GPIOF  
+#define LCD_SPI_MISO_SOURCE           GPIO_PinSource8
+#define LCD_SPI_MISO_AF               GPIO_AF_SPI5
+#define LCD_SPI_MOSI_PIN              LL_GPIO_PIN_9                     /* PF.09 */
+#define LCD_SPI_MOSI_GPIO_PORT        GPIOF                          /* GPIOF */
+#define LCD_SPI_MOSI_GPIO_CLK         RCC_AHB1Periph_GPIOF  
+#define LCD_SPI_MOSI_SOURCE           GPIO_PinSource9
+#define LCD_SPI_MOSI_AF               GPIO_AF_SPI5
+#define LCD_SPI                       SPI5
+#define LCD_SPI_CLK                   RCC_APB2ENR_SPI5 
+
+//-------------------| LTDC Defines |----------------------------------------------
+#define GCR_MASK                     ((uint32_t)0x0FFE888F)  /* LTDC GCR Mask */
+
+// LCD Control pin  
+#define LCD_NCS_PIN             LL_GPIO_PIN_2                  
+#define LCD_NCS_GPIO_PORT       GPIOC                      
+#define LCD_NCS_GPIO_CLK        RCC_AHB1ENR_GPIOCEN 
+
+//brief  LCD Command/data pin    
+#define LCD_WRX_PIN             LL_GPIO_PIN_13                  
+#define LCD_WRX_GPIO_PORT       GPIOD
+#define LCD_WRX_GPIO_CLK        RCC_AHB1ENR_GPIODEN
+
+#define ENABLE 0x01
+#define DISABLE !ENABLE
+
+//---------| Prototypes 
+//ltdc
+void LCD_ChipSelect(uint8_t state);
+void LCD_CtrlLinesConfig(void);
+void LTDC_Init(LTDC_InitTypeDef* LTDC_InitStruct);
+
+//FMC
+void memCheck(void);
+void fmc_cmdStruct_config(FMC_SDRAM_CommandTypeDef *sdramCMD);
+void SDRAM_InitSequence(void);
+void init_SDRAM(void);
+void init_SDRAM_GPIO(void);
+
+//startup
+void setClockTo180(void);
+void CL_printMsg_init_Default(void);
+void CL_printMsg(char *msg, ...);
+void initLed(void);
+void blinkLed(uint16_t times, uint16_t del);
+//--------------------------------------------------------------------------------
+int main(void)
+{
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	ITM->LAR = 0xC5ACCE55; 
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	setClockTo180();
+	CL_printMsg_init_Default();
+
+	CL_printMsg("SystemCoreClock : %d \n", SystemCoreClock);
+	
+	
+	init_SDRAM();
+	init_SDRAM_GPIO();
+	FMC_SDRAM_WriteProtection_Disable(FMC_Bank5_6, FMC_SDRAM_BANK2);
+	initLed();
+	blinkLed(5, 50);
+
+
+
+	for (;;)
+	{
+		
+	}
+}//--------------------------------------------------------------------------------
+void LCD_ChipSelect(uint8_t state)
+{
+	if (state == ENABLE)
+	{
+		LL_GPIO_SetOutputPin(LCD_NCS_GPIO_PORT, LCD_NCS_PIN);
+		
+	}
+	else
+	{
+		LL_GPIO_ResetOutputPin(LCD_NCS_GPIO_PORT, LCD_NCS_PIN);
+	}
+}//--------------------------------------------------------------------------------
+void LCD_CtrlLinesConfig(void)
+{
+	LL_GPIO_InitTypeDef GPIO_InitStructure;
+
+	/* Enable GPIOs clock*/
+	RCC->AHB1ENR |= (LCD_NCS_GPIO_CLK | LCD_WRX_GPIO_CLK);
+
+	/* Configure NCS in Output Push-Pull mode */
+	GPIO_InitStructure.Pin = LCD_NCS_PIN;
+	GPIO_InitStructure.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStructure.Mode = LL_GPIO_MODE_OUTPUT;
+	GPIO_InitStructure.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(LCD_NCS_GPIO_PORT, &GPIO_InitStructure);
+  
+	/* Configure WRX in Output Push-Pull mode */
+	GPIO_InitStructure.Pin = LCD_WRX_PIN;
+	LL_GPIO_Init(LCD_WRX_GPIO_PORT, &GPIO_InitStructure);
+
+	/* Set chip select pin high */
+	//LCD_CtrlLinesWrite(LCD_NCS_GPIO_PORT, LCD_NCS_PIN, Bit_SET);
+	LL_GPIO_SetOutputPin(LCD_NCS_GPIO_PORT, LCD_NCS_PIN);
+}//--------------------------------------------------------------------------------
+void LCD_Config(void)
+{
+	LTDC_InitTypeDef               LTDC_InitStruct;
+	LTDC_Layer_InitTypeDef         LTDC_Layer_InitStruct;
+	LL_GPIO_InitTypeDef               GPIO_InitStructure;
+  
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+  
+	/* Configure NCS in Output Push-Pull mode */
+	GPIO_InitStructure.Pin = LL_GPIO_PIN_13;
+	GPIO_InitStructure.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStructure.Mode = LL_GPIO_MODE_OUTPUT;
+	GPIO_InitStructure.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStructure.Pull = LL_GPIO_PULL_NO;
+	LL_GPIO_Init(GPIOD, &GPIO_InitStructure);
+  
+	/* Configure the LCD Control pins ------------------------------------------*/
+	LCD_CtrlLinesConfig();
+	LCD_ChipSelect(DISABLE);
+	LCD_ChipSelect(ENABLE);
+  
+	/* Configure the LCD_SPI interface -----------------------------------------*/
+	LCD_SPIConfig(); 
+  
+	/* Power on the LCD --------------------------------------------------------*/
+	LCD_PowerOn();
+  
+	/* Enable the LTDC Clock */
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_LTDC, ENABLE);
+  
+	/* Enable the DMA2D Clock */
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA2D, ENABLE); 
+  
+	/* Configure the LCD Control pins */
+	LCD_AF_GPIOConfig();  
+  
+	/* Configure the FMC Parallel interface : SDRAM is used as Frame Buffer for 
+	   LCD */
+	//SDRAM_Init();
+  init_SDRAM();
+	init_SDRAM_GPIO();
+	/* Enable Pixel Clock ------------------------------------------------------*/
+  
+	/* Configure PLLSAI prescalers for LCD */
+	/* PLLSAI_VCO Input = HSE_VALUE/PLL_M = 1 Mhz */
+	/* PLLSAI_VCO Output = PLLSAI_VCO Input * PLLSAI_N = 192 Mhz */
+	/* PLLLCDCLK = PLLSAI_VCO Output/PLLSAI_R = 192/3 = 64 Mhz */
+	/* LTDC clock frequency = PLLLCDCLK / RCC_PLLSAIDivR = 64/8 = 8 Mhz */
+	RCC_PLLSAIConfig(192, 7, 3);
+	RCC_LTDCCLKDivConfig(RCC_PLLSAIDivR_Div8);
+  
+	/* Enable PLLSAI Clock */
+	RCC_PLLSAICmd(ENABLE);
+	/* Wait for PLLSAI activation */
+	while (RCC_GetFlagStatus(RCC_FLAG_PLLSAIRDY) == RESET)
+	{
+	}
+  
+	/* LTDC Initialization -----------------------------------------------------*/
+  
+	/* Initialize the horizontal synchronization polarity as active low*/
+	LTDC_InitStruct.LTDC_HSPolarity = LTDC_HSPolarity_AL;     
+	/* Initialize the vertical synchronization polarity as active low */  
+	LTDC_InitStruct.LTDC_VSPolarity = LTDC_VSPolarity_AL;     
+	/* Initialize the data enable polarity as active low */ 
+	LTDC_InitStruct.LTDC_DEPolarity = LTDC_DEPolarity_AL;     
+	/* Initialize the pixel clock polarity as input pixel clock */ 
+	LTDC_InitStruct.LTDC_PCPolarity = LTDC_PCPolarity_IPC;
+  
+	/* Timing configuration */
+	/* Configure horizontal synchronization width */     
+	LTDC_InitStruct.LTDC_HorizontalSync = 9;
+	/* Configure vertical synchronization height */
+	LTDC_InitStruct.LTDC_VerticalSync = 1;
+	/* Configure accumulated horizontal back porch */
+	LTDC_InitStruct.LTDC_AccumulatedHBP = 29; 
+	/* Configure accumulated vertical back porch */
+	LTDC_InitStruct.LTDC_AccumulatedVBP = 3;  
+	/* Configure accumulated active width */  
+	LTDC_InitStruct.LTDC_AccumulatedActiveW = 269;
+	/* Configure accumulated active height */
+	LTDC_InitStruct.LTDC_AccumulatedActiveH = 323;
+	/* Configure total width */
+	LTDC_InitStruct.LTDC_TotalWidth = 279; 
+	/* Configure total height */
+	LTDC_InitStruct.LTDC_TotalHeigh = 327;
+  
+	LTDC_Init(&LTDC_InitStruct);
+  
+	/* Configure R,G,B component values for LCD background color */                   
+	LTDC_InitStruct.LTDC_BackgroundRedValue = 0;            
+	LTDC_InitStruct.LTDC_BackgroundGreenValue = 0;          
+	LTDC_InitStruct.LTDC_BackgroundBlueValue = 255;
+  
+	LTDC_Init(&LTDC_InitStruct);
+  
+	/* LTDC initialization end -------------------------------------------------*/
+  
+	/* Layer1 Configuration ----------------------------------------------------*/  
+  
+	/* Windowing configuration */ 
+	/* In this case all the active display area is used to display a picture then:
+	Horizontal start = horizontal synchronization + Horizontal back porch = 30 
+	Horizontal stop = Horizontal start + window width -1 = 30 + 240 -1
+	Vertical start   = vertical synchronization + vertical back porch     = 4
+	Vertical stop   = Vertical start + window height -1  = 4 + 160 -1      */ 
+	LTDC_Layer_InitStruct.LTDC_HorizontalStart = 30;
+	LTDC_Layer_InitStruct.LTDC_HorizontalStop = (240 + 30 - 1); 
+	LTDC_Layer_InitStruct.LTDC_VerticalStart = 4;
+	LTDC_Layer_InitStruct.LTDC_VerticalStop = 160 + 4 - 1; 
+  
+	/* Pixel Format configuration*/           
+	LTDC_Layer_InitStruct.LTDC_PixelFormat = LTDC_Pixelformat_RGB565;
+  
+	/* Alpha constant (255 totally opaque) */
+	LTDC_Layer_InitStruct.LTDC_ConstantAlpha = 255; 
+  
+	/* Configure blending factors */       
+	LTDC_Layer_InitStruct.LTDC_BlendingFactor_1 = LTDC_BlendingFactor1_PAxCA;    
+	LTDC_Layer_InitStruct.LTDC_BlendingFactor_2 = LTDC_BlendingFactor2_PAxCA;  
+  
+	/* Default Color configuration (configure A,R,G,B component values) */          
+	LTDC_Layer_InitStruct.LTDC_DefaultColorBlue = 0;        
+	LTDC_Layer_InitStruct.LTDC_DefaultColorGreen = 0;       
+	LTDC_Layer_InitStruct.LTDC_DefaultColorRed = 0;         
+	LTDC_Layer_InitStruct.LTDC_DefaultColorAlpha = 0;   
+  
+	/* Input Address configuration */    
+	LTDC_Layer_InitStruct.LTDC_CFBStartAdress = (uint32_t)&ST_LOGO_1;
+  
+	/* the length of one line of pixels in bytes + 3 then :
+	Line Lenth = Active high width x number of bytes per pixel + 3 
+	Active high width         = 240 
+	number of bytes per pixel = 2    (pixel_format : RGB565) 
+	*/
+	LTDC_Layer_InitStruct.LTDC_CFBLineLength = ((240 * 2) + 3);
+  
+	/*  the pitch is the increment from the start of one line of pixels to the 
+	start of the next line in bytes, then :
+	Pitch = Active high width x number of bytes per pixel     
+	*/
+	LTDC_Layer_InitStruct.LTDC_CFBPitch = (240 * 2);  
+  
+	/* configure the number of lines */
+	LTDC_Layer_InitStruct.LTDC_CFBLineNumber = 160;
+  
+	LTDC_LayerInit(LTDC_Layer1, &LTDC_Layer_InitStruct);
+  
+	/* Layer1 Configuration end ------------------------------------------------*/
+  
+	/* Layer2 Configuration ----------------------------------------------------*/
+  
+	/* Windowing configuration */ 
+	/* In this case only 320x240 window of the active display area is used 
+	to display a picture then :
+	Horizontal start = horizontal sync + offset_x + Horizontal back porch = 30
+	Horizontal stop = Horizontal start + offset_x + window width -1 = 30 + 240 -1 
+	Vertical start  = vertical sync + offset_y + vertical back porch  = 160 + 4
+	Vertical stop  = Vertical start + offset_y + window height -1  = 4 + 320 -1 */  
+	LTDC_Layer_InitStruct.LTDC_HorizontalStart = 30;
+	LTDC_Layer_InitStruct.LTDC_HorizontalStop = (240 + 30 - 1); 
+	LTDC_Layer_InitStruct.LTDC_VerticalStart = 160 + 4;
+	LTDC_Layer_InitStruct.LTDC_VerticalStop = (320 + 4 - 1);
+  
+	/* Pixel Format configuration */           
+	LTDC_Layer_InitStruct.LTDC_PixelFormat = LTDC_Pixelformat_RGB565;
+  
+	/* Alpha constant configuration : The constant alpha for layer 2 is decreased 
+	to see the layer 1 in the intersection zone*/
+	LTDC_Layer_InitStruct.LTDC_ConstantAlpha = 255;
+  
+	/* Default Color configuration (configure A,R,G,B component values) */           
+	LTDC_Layer_InitStruct.LTDC_DefaultColorBlue = 0;        
+	LTDC_Layer_InitStruct.LTDC_DefaultColorGreen = 0;       
+	LTDC_Layer_InitStruct.LTDC_DefaultColorRed = 0;         
+	LTDC_Layer_InitStruct.LTDC_DefaultColorAlpha = 0;
+  
+	/* blending Factors */    
+	LTDC_Layer_InitStruct.LTDC_BlendingFactor_1 = LTDC_BlendingFactor1_PAxCA;    
+	LTDC_Layer_InitStruct.LTDC_BlendingFactor_2 = LTDC_BlendingFactor2_PAxCA;
+  
+	/* Configure Input Address : frame buffer is located at FLASH memory */    
+	LTDC_Layer_InitStruct.LTDC_CFBStartAdress = (uint32_t)&ST_LOGO_2;
+  
+	/* the length of one line of pixels in bytes + 3 then :
+	Line Lenth = Active high width x number of bytes per pixel + 3 
+	Active high width         = 240 
+	number of bytes per pixel = 2    (pixel_format : RGB565)   */
+  
+	LTDC_Layer_InitStruct.LTDC_CFBLineLength = ((240 * 2) + 3); 
+	LTDC_Layer_InitStruct.LTDC_CFBPitch = (240 * 2);
+  
+	/*  the pitch is the increment from the start of one line of pixels to the 
+	start of the next line in bytes, then :
+	Pitch = Active high width x number of bytes per pixel     
+	*/
+	LTDC_Layer_InitStruct.LTDC_CFBLineNumber = 160; 
+  
+	/* Initialize the Layer 2 */
+	LTDC_LayerInit(LTDC_Layer2, &LTDC_Layer_InitStruct);
+  
+	/* Layer2 Configuration end ------------------------------------------------*/
+	LTDC_DitherCmd(ENABLE);
+}//--------------------------------------------------------------------------------
+void LTDC_Init(LTDC_InitTypeDef* LTDC_InitStruct)
+{
+	uint32_t horizontalsync = 0;
+	uint32_t accumulatedHBP = 0;
+	uint32_t accumulatedactiveW = 0;
+	uint32_t totalwidth = 0;
+	uint32_t backgreen = 0;
+	uint32_t backred = 0;
+	
+	/* Sets Synchronization size */
+	LTDC->SSCR &= ~(LTDC_SSCR_VSH | LTDC_SSCR_HSW);
+	horizontalsync = (LTDC_InitStruct->LTDC_HorizontalSync << 16);
+	LTDC->SSCR |= (horizontalsync | LTDC_InitStruct->LTDC_VerticalSync);
+
+	/* Sets Accumulated Back porch */
+	LTDC->BPCR &= ~(LTDC_BPCR_AVBP | LTDC_BPCR_AHBP);
+	accumulatedHBP = (LTDC_InitStruct->LTDC_AccumulatedHBP << 16);
+	LTDC->BPCR |= (accumulatedHBP | LTDC_InitStruct->LTDC_AccumulatedVBP);
+	/* Sets Accumulated Active Width */
+	LTDC->AWCR &= ~(LTDC_AWCR_AAH | LTDC_AWCR_AAW);
+	accumulatedactiveW = (LTDC_InitStruct->LTDC_AccumulatedActiveW << 16);
+	LTDC->AWCR |= (accumulatedactiveW | LTDC_InitStruct->LTDC_AccumulatedActiveH);
+
+	/* Sets Total Width */
+	LTDC->TWCR &= ~(LTDC_TWCR_TOTALH | LTDC_TWCR_TOTALW);
+	totalwidth = (LTDC_InitStruct->LTDC_TotalWidth << 16);
+	LTDC->TWCR |= (totalwidth | LTDC_InitStruct->LTDC_TotalHeigh);
+
+	LTDC->GCR &= (uint32_t)GCR_MASK;
+	LTDC->GCR |=  (uint32_t)(LTDC_InitStruct->LTDC_HSPolarity | LTDC_InitStruct->LTDC_VSPolarity | \
+	                         LTDC_InitStruct->LTDC_DEPolarity | LTDC_InitStruct->LTDC_PCPolarity);
+
+	/* sets the background color value */
+	backgreen = (LTDC_InitStruct->LTDC_BackgroundGreenValue << 8);
+	backred = (LTDC_InitStruct->LTDC_BackgroundRedValue << 16);
+
+	LTDC->BCCR &= ~(LTDC_BCCR_BCBLUE | LTDC_BCCR_BCGREEN | LTDC_BCCR_BCRED);
+	LTDC->BCCR |= (backred | backgreen | LTDC_InitStruct->LTDC_BackgroundBlueValue);
+	
+	
+	
+}//--------------------------------------------------------------------------------
+
+void memCheck(void)
+{
+	uint8_t ubWritedata_8b = 0x3C, ubReaddata_8b = 0;  
+	uint16_t uhWritedata_16b = 0x1E5A, uhReaddata_16b = 0;  
+	uint32_t uwReadwritestatus = 0;
+	uint32_t counter = 0x0;
+	CL_printMsg("Mem clear initialized \n");
+	for (counter = 0x00; counter < EXTERNAL_SDRAM_SIZE; counter++)
+	{
+		*(__IO uint8_t*)(EXTERNAL_SDRAM_BANK_ADDR + counter) = (uint8_t)0x0;
+	}
+	CL_printMsg("Mem clear done\n");
+	
+	
+	//--------------| 8 bit memory writes 	
+	
+		CL_printMsg("Mem 8bit  write  start\n");
+	for (counter = 0; counter < EXTERNAL_SDRAM_SIZE; counter++)
+	{
+		*(__IO uint8_t*)(EXTERNAL_SDRAM_BANK_ADDR + counter) = (uint8_t)(ubWritedata_8b + counter);
+	}
+	CL_printMsg("Mem 8bit  write  done\n");
+	
+	
+	counter = 0;
+	uwReadwritestatus = 0;
+	CL_printMsg("mem read and check start\n");
+	while ((counter < EXTERNAL_SDRAM_SIZE) && (uwReadwritestatus == 0))
+	{
+		ubReaddata_8b = *(__IO uint8_t*)(EXTERNAL_SDRAM_BANK_ADDR + counter);
+		if (ubReaddata_8b != (uint8_t)(ubWritedata_8b + counter))
+		{
+			uwReadwritestatus = 1;
+			CL_printMsg("8bit mem write NOT ok!\n");
+			          
+		}
+		else
+		{
+			
+		}
+		counter++;
+	} 
+	CL_printMsg("8bit mem write ok!\n");
+	
+	//--------------| 16 bit memory writes 
+		//clear 
+			CL_printMsg("Mem clear initialized \n");
+	for (counter = 0x00; counter < EXTERNAL_SDRAM_SIZE; counter++)
+	{
+		*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + 2*counter) = (uint16_t)0x00;
+	}
+	CL_printMsg("Mem clear done\n");
+	/* Write data value to all SDRAM memory */
+	CL_printMsg("Mem 16bit  write  start\n");
+	for (counter = 0; counter < EXTERNAL_SDRAM_SIZE; counter++)
+	{
+		*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + 2*counter) = (uint16_t)(uhWritedata_16b + counter);
+	}
+	CL_printMsg("Mem 16bit  write  done\n");
+	/* Read back SDRAM memory and check content correctness*/
+	counter = 0;
+	uwReadwritestatus = 0;
+	CL_printMsg("mem read and check start\n");
+	while ((counter < EXTERNAL_SDRAM_SIZE) && (uwReadwritestatus == 0))
+	{
+		uhReaddata_16b = *(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + 2*counter);
+		if (uhReaddata_16b != (uint16_t)(uhWritedata_16b + counter))
+		{
+			uwReadwritestatus = 1;
+			CL_printMsg("16bit mem write NOT ok!\n");
+		}
+		else
+		{
+			
+		}
+		counter++;
+	}
+	CL_printMsg("16bit mem write ok!\n");
+}//--------------------------------------------------------------------------------
+void fmc_cmdStruct_config(FMC_SDRAM_CommandTypeDef *sdramCMD)
+{
+	uint32_t temp = 0;
+	temp = (uint32_t)(sdramCMD->CommandMode |
+                      sdramCMD->CommandTarget |
+                     (((sdramCMD->AutoRefreshNumber) - 1) << 5) |
+                     ((sdramCMD->ModeRegisterDefinition) << 9));
+  
+	FMC_Bank5_6->SDCMR = temp;
+}
+void SDRAM_InitSequence(void)
+{
+	uint32_t temp = 0;
+	FMC_SDRAM_CommandTypeDef sdramCMD;
+	sdramCMD.CommandMode	= 	FMC_SDRAM_CMD_CLK_ENABLE;
+	sdramCMD.CommandTarget	=	FMC_SDRAM_CMD_TARGET_BANK2;
+	sdramCMD.AutoRefreshNumber =	1;
+	sdramCMD.ModeRegisterDefinition = 0;
+	
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	fmc_cmdStruct_config(&sdramCMD);
+	
+	LL_mDelay(10);
+
+	sdramCMD.CommandMode	= 	FMC_SDRAM_CMD_PALL;
+//	sdramCMD.CommandTarget	=	FMC_SDRAM_CMD_TARGET_BANK2; //unchanged from previous
+//	sdramCMD.AutoRefreshNumber =	1;
+//	sdramCMD.ModeRegisterDefinition = 0;
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	fmc_cmdStruct_config(&sdramCMD);
+	
+	sdramCMD.CommandMode	= 	FMC_SDRAM_CMD_AUTOREFRESH_MODE;
+	sdramCMD.CommandTarget	=	FMC_SDRAM_CMD_TARGET_BANK2;
+	sdramCMD.AutoRefreshNumber =	4;
+	sdramCMD.ModeRegisterDefinition = 0;
+	
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	fmc_cmdStruct_config(&sdramCMD);
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	fmc_cmdStruct_config(&sdramCMD);
+	
+	temp = (uint32_t)SDRAM_MODEREG_BURST_LENGTH_2 | SDRAM_MODEREG_BURST_TYPE_SEQUENTIAL | SDRAM_MODEREG_CAS_LATENCY_3 | SDRAM_MODEREG_OPERATING_MODE_STANDARD | SDRAM_MODEREG_WRITEBURST_MODE_SINGLE;
+	
+	sdramCMD.CommandMode	= 	FMC_SDRAM_CMD_LOAD_MODE;
+	sdramCMD.CommandTarget	=	FMC_SDRAM_CMD_TARGET_BANK2;
+	sdramCMD.AutoRefreshNumber =	1;
+	sdramCMD.ModeRegisterDefinition = temp;
+	
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	fmc_cmdStruct_config(&sdramCMD);
+	
+	FMC_SDRAM_ProgramRefreshRate(FMC_Bank5_6,1386);
+	while (__FMC_SDRAM_GET_FLAG(FMC_Bank5_6, FMC_SDRAM_FLAG_BUSY) !=  0) ;
+	
+	
+}//--------------------------------------------------------------------------------
+void init_SDRAM(void)
+{
+	init_SDRAM_GPIO();
+	
+	RCC->AHB3ENR |= RCC_AHB3ENR_FMCEN;
+	
+	
+	FMC_SDRAM_TimingTypeDef		sdramTim;	
+	sdramTim.LoadToActiveDelay		= 2;
+	sdramTim.ExitSelfRefreshDelay	= 7;
+	sdramTim.SelfRefreshTime		= 4;
+	sdramTim.RowCycleDelay			= 7;
+	sdramTim.WriteRecoveryTime		= 2;
+	sdramTim.RPDelay				= 2;
+	sdramTim.RCDDelay				= 2;
+	
+	FMC_SDRAM_InitTypeDef		sdramInit;
+	sdramInit.SDBank			 = FMC_SDRAM_BANK2;
+	sdramInit.ColumnBitsNumber	 = FMC_SDRAM_COLUMN_BITS_NUM_8;
+	sdramInit.RowBitsNumber		 = FMC_SDRAM_ROW_BITS_NUM_12;
+	sdramInit.MemoryDataWidth	 = FMC_SDRAM_MEM_BUS_WIDTH_16;
+	sdramInit.InternalBankNumber = FMC_SDRAM_INTERN_BANKS_NUM_4;
+	sdramInit.CASLatency		 = FMC_SDRAM_CAS_LATENCY_3;
+	sdramInit.WriteProtection	 = FMC_SDRAM_WRITE_PROTECTION_DISABLE;
+	sdramInit.SDClockPeriod      = FMC_SDRAM_CLOCK_PERIOD_2;
+	sdramInit.ReadBurst			 = FMC_SDRAM_RBURST_DISABLE;
+	sdramInit.ReadPipeDelay		 = FMC_SDRAM_RPIPE_DELAY_1;
+	FMC_SDRAM_Init(FMC_Bank5_6, &sdramInit);
+	FMC_SDRAM_Timing_Init(FMC_Bank5_6, &sdramTim, FMC_SDRAM_BANK2);
+	
+	SDRAM_InitSequence();
+	
+}//--------------------------------------------------------------------------------
+void init_SDRAM_GPIO(void)
+{
+	
+  
+	/* Enable GPIOs clock GPIO B C D E F G */
+	RCC->AHB1ENR |=  RCC_AHB1ENR_GPIOBEN | RCC_AHB1ENR_GPIOCEN | RCC_AHB1ENR_GPIODEN | RCC_AHB1ENR_GPIOEEN | RCC_AHB1ENR_GPIOFEN | RCC_AHB1ENR_GPIOGEN;
+                            
+	/*-- GPIOs Configuration -----------------------------------------------------*/
+	/*
+	 +-------------------+--------------------+--------------------+--------------------+
+	 +                       SDRAM pins assignment                                      +
+	 +-------------------+--------------------+--------------------+--------------------+
+	 | PD0  <-> FMC_D2   | PE0  <-> FMC_NBL0  | PF0  <-> FMC_A0    | PG0  <-> FMC_A10   |
+	 | PD1  <-> FMC_D3   | PE1  <-> FMC_NBL1  | PF1  <-> FMC_A1    | PG1  <-> FMC_A11   |
+	 | PD8  <-> FMC_D13  | PE7  <-> FMC_D4    | PF2  <-> FMC_A2    | PG8  <-> FMC_SDCLK |
+	 | PD9  <-> FMC_D14  | PE8  <-> FMC_D5    | PF3  <-> FMC_A3    | PG15 <-> FMC_NCAS  |
+	 | PD10 <-> FMC_D15  | PE9  <-> FMC_D6    | PF4  <-> FMC_A4    |--------------------+ 
+	 | PD14 <-> FMC_D0   | PE10 <-> FMC_D7    | PF5  <-> FMC_A5    |   
+	 | PD15 <-> FMC_D1   | PE11 <-> FMC_D8    | PF11 <-> FMC_NRAS  | 
+	 +-------------------| PE12 <-> FMC_D9    | PF12 <-> FMC_A6    | 
+	                     | PE13 <-> FMC_D10   | PF13 <-> FMC_A7    |    
+	                     | PE14 <-> FMC_D11   | PF14 <-> FMC_A8    |
+	                     | PE15 <-> FMC_D12   | PF15 <-> FMC_A9    |
+	                    +-------------------+--------------------+--------------------+
+	                    | PB5 <-> FMC_SDCKE1| 
+	                    | PB6 <-> FMC_SDNE1 | 
+	                    | PC0 <-> FMC_SDNWE |
+	                    +-------------------+  
+  
+	                    */
+  
+	                     
+	LL_GPIO_InitTypeDef gpio;
+	LL_GPIO_StructInit(&gpio);
+	
+	gpio.Mode  = LL_GPIO_MODE_ALTERNATE;
+	gpio.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	gpio.Alternate = LL_GPIO_AF_12;
+
+
+  
+	gpio.Pin = LL_GPIO_PIN_5  | LL_GPIO_PIN_6;      
+	LL_GPIO_Init(GPIOB, &gpio);  	
+  
+	gpio.Pin = LL_GPIO_PIN_0;      
+	LL_GPIO_Init(GPIOC, &gpio);  
+
+
+	gpio.Pin = LL_GPIO_PIN_0 | LL_GPIO_PIN_1  | LL_GPIO_PIN_8 | LL_GPIO_PIN_9 | LL_GPIO_PIN_10 | LL_GPIO_PIN_14 | LL_GPIO_PIN_15;
+	LL_GPIO_Init(GPIOD, &gpio);
+
+
+	gpio.Pin = LL_GPIO_PIN_0  | LL_GPIO_PIN_1  | LL_GPIO_PIN_7 | LL_GPIO_PIN_8  | LL_GPIO_PIN_9  | LL_GPIO_PIN_10 | LL_GPIO_PIN_11 | LL_GPIO_PIN_12 | LL_GPIO_PIN_13 |  LL_GPIO_PIN_14 | LL_GPIO_PIN_15;
+	LL_GPIO_Init(GPIOE, &gpio);
+
+
+
+	gpio.Pin = LL_GPIO_PIN_0  | LL_GPIO_PIN_1 | LL_GPIO_PIN_2 | LL_GPIO_PIN_3  | LL_GPIO_PIN_4 | LL_GPIO_PIN_5 | LL_GPIO_PIN_11 | LL_GPIO_PIN_12 | LL_GPIO_PIN_13 | LL_GPIO_PIN_14 | LL_GPIO_PIN_15;      
+	LL_GPIO_Init(GPIOF, &gpio);
+
+  
+
+	gpio.Pin = LL_GPIO_PIN_0 | LL_GPIO_PIN_1 | LL_GPIO_PIN_4 | LL_GPIO_PIN_5 | LL_GPIO_PIN_8 | LL_GPIO_PIN_15;
+	LL_GPIO_Init(GPIOG, &gpio);
+}//--------------------------------------------------------------------------------
+void LCD_SPIConfig(void)
+{
+	
+	LL_GPIO_InitTypeDef   GPIO_InitStructure;
+
+	/* Enable LCD_SPI_SCK_GPIO_CLK, LCD_SPI_MISO_GPIO_CLK and LCD_SPI_MOSI_GPIO_CLK clock */
+	RCC_AHB1PeriphClockCmd(LCD_SPI_SCK_GPIO_CLK | LCD_SPI_MISO_GPIO_CLK | LCD_SPI_MOSI_GPIO_CLK, ENABLE);
+	
+
+	/* Enable LCD_SPI and SYSCFG clock  */
+	RCC_APB2PeriphClockCmd(LCD_SPI_CLK, ENABLE);
+  
+	/* Configure LCD_SPI SCK pin */
+	LL_GPIO_StructInit(&GPIO_InitStructure);
+	GPIO_InitStructure.Pin = LCD_SPI_SCK_PIN;
+	GPIO_InitStructure.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStructure.Mode = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStructure.Pull = LL_GPIO_PULL_DOWN;
+	LL_GPIO_Init(LCD_SPI_SCK_GPIO_PORT, &GPIO_InitStructure);
+
+	/* Configure LCD_SPI MISO pin */
+	GPIO_InitStructure.Pin = LCD_SPI_MISO_PIN;
+	LL_GPIO_Init(LCD_SPI_MISO_GPIO_PORT, &GPIO_InitStructure);
+
+	/* Configure LCD_SPI MOSI pin */
+	GPIO_InitStructure.Pin = LCD_SPI_MOSI_PIN;
+	GPIO_Init(LCD_SPI_MOSI_GPIO_PORT, &GPIO_InitStructure);
+
+	/* Connect SPI SCK */
+	GPIO_PinAFConfig(LCD_SPI_SCK_GPIO_PORT, LCD_SPI_SCK_SOURCE, LCD_SPI_SCK_AF);
+
+	/* Connect SPI MISO */
+	GPIO_PinAFConfig(LCD_SPI_MISO_GPIO_PORT, LCD_SPI_MISO_SOURCE, LCD_SPI_MISO_AF);
+
+	/* Connect SPI MOSI */
+	GPIO_PinAFConfig(LCD_SPI_MOSI_GPIO_PORT, LCD_SPI_MOSI_SOURCE, LCD_SPI_MOSI_AF);
+  
+	//reset the peripheral
+	LL_SPI_DeInit(SPI5);
+
+	/* SPI configuration -------------------------------------------------------*/
+	/* If the SPI peripheral is already enabled, don't reconfigure it */
+	LL_SPI_InitTypeDef    SPI_InitStructure;
+	LL_SPI_StructInit(&SPI_InitStructure);
+	   
+
+	SPI_InitStructure.Mode = LL_SPI_MODE_MASTER;
+	SPI_InitStructure.NSS = LL_SPI_NSS_SOFT;
+	/* SPI baudrate is set to 5.6 MHz (PCLK2/SPI_BaudRatePrescaler = 90/16 = 5.625 MHz) 
+		to verify these constraints:
+		    - ILI9341 LCD SPI interface max baudrate is 10MHz for write and 6.66MHz for read
+		    - l3gd20 SPI interface max baudrate is 10MHz for write/read
+		    - PCLK2 frequency is set to 90 MHz 
+		*/
+	SPI_InitStructure.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV16;
+	SPI_InitStructure.BitOrder = LL_SPI_MSB_FIRST;
+	SPI_InitStructure.CRCPoly = 7;
+	LL_SPI_Init(LCD_SPI, &SPI_InitStructure);
+
+	/* Enable L3GD20_SPI  */
+	LL_SPI_Enable(SPI5);
+	
+}//--------------------------------------------------------------------------------
+void setClockTo180(void)
+{
+	LL_FLASH_SetLatency(LL_FLASH_LATENCY_5);
+
+	if (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_5)
+	{
+	//	Error_Handler();  
+	}
+	
+	
+	LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+	LL_PWR_EnableOverDriveMode();
+	LL_RCC_HSE_Enable();
+
+	/* Wait till HSE is ready */
+	while (LL_RCC_HSE_IsReady() != 1)
+	{
+    
+	}
+	LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSE, LL_RCC_PLLM_DIV_4, 180, LL_RCC_PLLP_DIV_2);
+	LL_RCC_PLL_Enable();
+
+	/* Wait till PLL is ready */
+	while (LL_RCC_PLL_IsReady() != 1)
+	{
+    
+	}
+	
+	
+	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+	LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_4);
+	LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_2);
+	LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
+
+	/* Wait till System clock is ready */
+	while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
+	{
+  
+	}
+	LL_Init1msTick(180000000);
+	LL_SYSTICK_SetClkSource(LL_SYSTICK_CLKSOURCE_HCLK);
+	LL_SetSystemCoreClock(180000000);
+	LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_TWICE);
+}//--------------------------------------------------------------------------------
+void CL_printMsg_init_Default(void)
+{
+
+	LL_USART_InitTypeDef USART_InitStruct = { 0 };
+
+	LL_GPIO_InitTypeDef GPIO_InitStruct = { 0 };
+
+	/* Peripheral clock enable */
+	LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+  
+	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
+	/**USART1 GPIO Configuration  
+	PA9   ------> USART1_TX
+	PA10   ------> USART1_RX 
+	*/
+	LL_GPIO_StructInit(&GPIO_InitStruct);
+	GPIO_InitStruct.Pin = LL_GPIO_PIN_9 ;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStruct.Alternate = LL_GPIO_AF_7;
+	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	/* USER CODE BEGIN USART1_Init 1 */
+
+	/* USER CODE END USART1_Init 1 */
+	LL_USART_StructInit(&USART_InitStruct);
+	USART_InitStruct.BaudRate = 115200;
+	USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX;
+	LL_USART_Init(USART1, &USART_InitStruct);
+	LL_USART_ConfigAsyncMode(USART1);
+	USART1->BRR = 0x30D;
+	LL_USART_Enable(USART1);
+}//--------------------------------------------------------------------------------
+void CL_printMsg(char *msg, ...)
+{	
+	char buff[80];	
+	va_list args;
+	va_start(args, msg);
+	vsprintf(buff, msg, args);
+		
+	for (int i = 0; i < strlen(buff); i++)
+	{		
+		USART1->DR = buff[i];
+		while (!(USART1->SR & USART_SR_TXE)) ;
+	}		
+		
+	while (!(USART1->SR & USART_SR_TC)) ;		
+}//--------------------------------------------------------------------------------
+void initLed(void)
+{	
+	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOG);
+	LL_GPIO_InitTypeDef gpio;
+	LL_GPIO_StructInit(&gpio);
+	gpio.Mode = LL_GPIO_MODE_OUTPUT;
+	gpio.Pin = LL_GPIO_PIN_14 | LL_GPIO_PIN_13;
+	LL_GPIO_Init(GPIOG, &gpio);
+
+
+}//--------------------------------------------------------------------------------
+void blinkLed(uint16_t times, uint16_t del)
+{
+	for (int i = 0; i < times; i++)
+	{
+		LL_GPIO_SetOutputPin(GPIOG, LL_GPIO_PIN_14);
+		LL_mDelay(del);
+		LL_GPIO_ResetOutputPin(GPIOG, LL_GPIO_PIN_13);
+		LL_mDelay(del);
+		LL_GPIO_SetOutputPin(GPIOG, LL_GPIO_PIN_13);
+		LL_mDelay(del);
+		LL_GPIO_ResetOutputPin(GPIOG, LL_GPIO_PIN_14);
+		LL_mDelay(del);
+	}
+}

@@ -1,0 +1,142 @@
+VisualGDB/Debug/lv_draw_arc.o: lvgl/src/lv_draw/lv_draw_arc.c \
+ lvgl/src/lv_draw/lv_draw_arc.h lvgl/src/lv_draw/lv_draw_line.h \
+ lvgl/src/lv_draw/../lv_core/lv_style.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdbool.h \
+ f:\stm32f4_tg\lvgl\src\lv_font\lv_font.h \
+ f:\stm32f4_tg\lvgl\src\lv_conf_internal.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdint.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\stdint.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_default_types.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\features.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\_newlib_version.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_intsup.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_stdint.h lvgl/lv_conf.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stddef.h \
+ f:\stm32f4_tg\lvgl\src\lv_font\lv_symbol_def.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h \
+ f:\stm32f4_tg\lvgl\src\lv_conf_internal.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\string.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\_ansi.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\newlib.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\config.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\ieeefp.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\reent.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\_ansi.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_types.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_types.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\lock.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\cdefs.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_locale.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\strings.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\string.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_mem.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_log.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_types.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_color.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_math.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_anim.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_types.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_debug.h \
+ f:\stm32f4_tg\lvgl\src\lv_draw\lv_draw_blend.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_color.h \
+ f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h \
+ f:\stm32f4_tg\lvgl\src\lv_draw\lv_draw_mask.h \
+ lvgl/src/lv_draw/lv_draw_rect.h lvgl/src/lv_draw/lv_draw_mask.h \
+ lvgl/src/lv_draw/../lv_misc/lv_math.h
+
+lvgl/src/lv_draw/lv_draw_arc.h:
+
+lvgl/src/lv_draw/lv_draw_line.h:
+
+lvgl/src/lv_draw/../lv_core/lv_style.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdbool.h:
+
+f:\stm32f4_tg\lvgl\src\lv_font\lv_font.h:
+
+f:\stm32f4_tg\lvgl\src\lv_conf_internal.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdint.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\stdint.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_default_types.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\features.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\_newlib_version.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_intsup.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_stdint.h:
+
+lvgl/lv_conf.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stddef.h:
+
+f:\stm32f4_tg\lvgl\src\lv_font\lv_symbol_def.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h:
+
+f:\stm32f4_tg\lvgl\src\lv_conf_internal.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\string.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\_ansi.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\newlib.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\config.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\ieeefp.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\reent.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\_ansi.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_types.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_types.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\lock.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\cdefs.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_locale.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\strings.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\string.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_mem.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_log.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_types.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_color.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_math.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_anim.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_types.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_debug.h:
+
+f:\stm32f4_tg\lvgl\src\lv_draw\lv_draw_blend.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_color.h:
+
+f:\stm32f4_tg\lvgl\src\lv_misc\lv_area.h:
+
+f:\stm32f4_tg\lvgl\src\lv_draw\lv_draw_mask.h:
+
+lvgl/src/lv_draw/lv_draw_rect.h:
+
+lvgl/src/lv_draw/lv_draw_mask.h:
+
+lvgl/src/lv_draw/../lv_misc/lv_math.h:

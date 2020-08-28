@@ -1,0 +1,49 @@
+VisualGDB/Debug/lv_async.o: lvgl/src/lv_misc/lv_async.c \
+ lvgl/src/lv_misc/lv_async.h lvgl/src/lv_misc/lv_task.h \
+ lvgl/src/lv_misc/../lv_conf_internal.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdint.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\stdint.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_default_types.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\features.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\_newlib_version.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_intsup.h \
+ c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_stdint.h lvgl/lv_conf.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdbool.h \
+ lvgl/src/lv_misc/lv_mem.h \
+ c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stddef.h \
+ lvgl/src/lv_misc/lv_log.h lvgl/src/lv_misc/lv_types.h \
+ lvgl/src/lv_misc/lv_ll.h
+
+lvgl/src/lv_misc/lv_async.h:
+
+lvgl/src/lv_misc/lv_task.h:
+
+lvgl/src/lv_misc/../lv_conf_internal.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdint.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\stdint.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\machine\_default_types.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\features.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\_newlib_version.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_intsup.h:
+
+c:\sysgcc\arm-eabi\arm-none-eabi\include\sys\_stdint.h:
+
+lvgl/lv_conf.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stdbool.h:
+
+lvgl/src/lv_misc/lv_mem.h:
+
+c:\sysgcc\arm-eabi\lib\gcc\arm-none-eabi\9.3.1\include\stddef.h:
+
+lvgl/src/lv_misc/lv_log.h:
+
+lvgl/src/lv_misc/lv_types.h:
+
+lvgl/src/lv_misc/lv_ll.h:
