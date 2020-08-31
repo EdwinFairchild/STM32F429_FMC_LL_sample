@@ -173,7 +173,8 @@ VisualGDB/Debug/STM32F4_TG.o: STM32F4_TG.c \
  lvgl/src/lv_draw/lv_img_cache.h lvgl/src/lv_draw/lv_img_decoder.h \
  lvgl/src/lv_api_map.h lvgl/src/../lvgl.h lv_demo_stress.h \
  C:/Users/amaya/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32F4xxxx/STM32F4xx_StdPeriph_Driver/inc/stm32f4xx_ltdc.h \
- F4_Peripherals/fonts.h images/st_logo1.h images/st_logo2.h
+ F4_Peripherals/fonts.h images/st_logo1.h images/st_logo2.h \
+ lvgl/src/lv_misc/lv_color.h lvgl/src/lv_misc/lv_area.h
 
 C:/Users/amaya/AppData/Local/VisualGDB/EmbeddedBSPs/arm-eabi/com.sysprogs.arm.stm32/STM32F4xxxx/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_bus.h:
 
@@ -618,3 +619,7 @@ F4_Peripherals/fonts.h:
 images/st_logo1.h:
 
 images/st_logo2.h:
+
+lvgl/src/lv_misc/lv_color.h:
+
+lvgl/src/lv_misc/lv_area.h:

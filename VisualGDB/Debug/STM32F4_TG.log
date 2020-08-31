@@ -1,6 +1,6 @@
 ﻿  STM32F4_TG.c
   Linking VisualGDB/Debug/STM32F4_TG...
   ------------------- Memory utilization report -------------------
-  Used FLASH: 226KB out of 2048KB (11%) [+8]
-  Used SRAM: 183KB out of 192KB (95%)
+  Used FLASH: 187KB out of 2048KB (9%) [-12]
+  Used SRAM: 96KB out of 192KB (50%)
   Used CCMRAM: 0 bytes out of 64KB (0%)

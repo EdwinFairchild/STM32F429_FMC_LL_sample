@@ -146,60 +146,71 @@ static volatile uint32_t t_saved = 0;
 static __IO uint16_t * my_fb = (__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR);
 #define TFT_HOR_RES 240
 #define TFT_VER_RES 320
+#include <stdint.h>
+#include "lvgl/src/lv_misc/lv_color.h"
+#include "lvgl/src/lv_misc/lv_area.h"
+
+/*********************
+ *      DEFINES
+ *********************/
+#define TFT_HOR_RES 240
+#define TFT_VER_RES 320
+
+#define TFT_EXT_FB		0		/*Frame buffer is located into an external SDRAM*/
+#define TFT_USE_GPU		0	
 //#define DEB
 uint32_t debug = 0;
-
+uint32_t len = 0;
+uint32_t lenPartial = 0;
+#define  BUFFER_LEN  136
+uint16_t lenRemainder = 0;
+bool PARTIAL = true; ;
+#define LEN_MAX   (TFT_HOR_RES * BUFFER_LEN * 2)
+uint32_t xlen = 0;
 uint32_t tobuttom = 0;
 uint32_t totop = 0;
 lv_obj_t * btn;
 lv_obj_t * label;
 lv_obj_t * slider;
 
-//---------| Prototypes 
+//---------| Prototypes |---------
 
 //LVGL
 void lv_ex_get_started_2(void);
-static void slider_event_cb(lv_obj_t * slider, lv_event_t event);
+void slider_event_cb(lv_obj_t * slider, lv_event_t event);
 void lv_ex_get_started_3(void);
-static void btn_event_cb(lv_obj_t * btn, lv_event_t event);
+void btn_event_cb(lv_obj_t * btn, lv_event_t event);
 void lv_ex_get_started_1(void);
 void tft_init(void);
 void monitor_cb(lv_disp_drv_t * d, uint32_t t, uint32_t p);
 void tft_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p);
-
-//misc
 void write_pixel_normal(uint16_t x, uint16_t y, uint16_t  color);
 void write_pixel(uint16_t x, uint16_t y, uint16_t  red, uint16_t  g, uint16_t  b);
-void clear_SDRAM(uint16_t value);
-void RCC_PLLSAIConfig(uint32_t PLLSAIN, uint32_t PLLSAIQ, uint32_t PLLSAIR);
+//misc
 void switch_logos(void);
-
 //spi
 void LCD_SPIConfig(void);
-
 //dma
 void initDMA(void);
-
-//ltdc
-void LTDC_Config_Layer_2(void);
-void LTDC_Config_Layer_1(void);
-void LCD_AF_GPIOConfig(void);
+//lcd
 void LCD_WriteData(uint8_t value);
 void LCD_WriteCommand(uint8_t LCD_Reg);
 void LCD_PowerOn(void);
 void LCD_ChipSelect(uint8_t state);
 void LCD_CtrlLinesConfig(void);
-void LTDC_Init2(LTDC_InitTypeDef* LTDC_InitStruct);
-void LCD_Config(void);
-
-
+//ltdc
+void ltdc_LCD_pins_config(void);
+void ltdc_config(void);
+void layer1_config(void);
+void lcd_init(void);
 //FMC
 void memCheck(void);
 void fmc_cmdStruct_config(FMC_SDRAM_CommandTypeDef *sdramCMD);
 void SDRAM_InitSequence(void);
 void init_SDRAM(void);
 void init_SDRAM_GPIO(void);
-
+void clear_SDRAM(uint16_t value);
+void RCC_PLLSAIConfig(uint32_t PLLSAIN, uint32_t PLLSAIQ, uint32_t PLLSAIR);
 //startup
 void setClockTo180(void);
 void CL_printMsg_init_Default(void);
@@ -207,65 +218,73 @@ void CL_printMsg(char *msg, ...);
 void initLed(void);
 void blinkLed(uint16_t times, uint16_t del);
 
-void SysTick_Handler(void)
+int main(void)
 {
-	lv_tick_inc(1);
-//	CL_printMsg("tick");
-}
-int main(void)//--------------------------------------------------------------------------------
-{
-#ifdef DEB
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-	ITM->LAR = 0xC5ACCE55; 
-	DWT->CYCCNT = 0;
-	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-#endif
+
 	
 	
-	 setClockTo180();
+	setClockTo180();
 	CL_printMsg_init_Default();
-	CL_printMsg("SystemCoreClock : %d \n", SystemCoreClock);
+	//CL_printMsg("SystemCoreClock : %d \n", SystemCoreClock);
+	
+	
 	LL_InitTick(180000000, 1000);
 	SysTick_Config(SystemCoreClock / 1000);
 	__NVIC_EnableIRQ(SysTick_IRQn);
-	init_SDRAM(); //is initialized in LCD_Config
-	//init_SDRAM_GPIO();
+	
+	//FMC/SDRAM
+	init_SDRAM();
 	FMC_SDRAM_WriteProtection_Disable(FMC_Bank5_6, FMC_SDRAM_BANK2);
-	clear_SDRAM(0x0000);
+	clear_SDRAM(0xB5A3);
+	
+	//Blinky
 	initLed();
-	blinkLed(5, 20);
+	//blinkLed(5, 20);
 
+	//DMA
 	initDMA();
 	
-	//specific order of shit
-	LCD_Config(); 	
-	LTDC_Config_Layer_1();
-//	LTDC_Config_Layer_2();
+	//LCD/LTDC
+	 
+	lcd_init();
+	ltdc_config();
+	layer1_config();
 	LTDC_DitherCmd(ENABLE);
-	
-
 	LTDC_LayerCmd(LTDC_Layer1, ENABLE);// Enable Layer 1	 	
-	//LTDC_LayerCmd(LTDC_Layer2, ENABLE);// Enable Layer 2	
-	LTDC_ReloadConfig(LTDC_IMReload);// Reload LTDC configuration 
-	
-	
-	
+	LTDC_ReloadConfig(LTDC_IMReload);// Reload LTDC configuration 	
 	LTDC_Cmd(ENABLE);	// Enable The LCD 	
 	 	
-	
-	 lv_init();
+	//LVGL
+	lv_init();
 	tft_init();
-	lv_ex_get_started_1();
+	//lv_demo_widgets();
 	//lv_demo_stress();
-	//	LTDC_ReloadConfig(LTDC_IMReload); // Reload LTDC configuration  	
-//		lv_coord_t xVal = 0; 
+	lv_ex_get_started_1();
+	lv_ex_get_started_3();
+	uint8_t sliderState, sliderVal = 0;
+	char buffer[3];
+//	CL_printMsg("Everything inited\n");
 	for (;;)
 	{
-		//if (xVal >= 50)
-			//xVal = 0;
-	//	lv_obj_set_pos(btn, xVal++, 10); /*Set its position*/
+		
+		if (sliderVal == 100)
+			sliderState = 0;
+		
+		if (sliderVal == 0)
+			sliderState = 1;
+		
+		if (sliderState == 1)
+			lv_slider_set_value(slider, sliderVal++, LV_ANIM_ON);
+		else
+			lv_slider_set_value(slider, sliderVal--, LV_ANIM_ON);
+		
+		
+		
+		slider_event_cb(slider, LV_EVENT_VALUE_CHANGED);
+			
+			
 		lv_task_handler();
-		LL_mDelay(10);
+		LL_mDelay(1);
 		//switch_logos();
 
 	
@@ -273,7 +292,34 @@ int main(void)//----------------------------------------------------------------
 	}
 	
 }//--------------------------------------------------------------------------------
-static void btn_event_cb(lv_obj_t * btn, lv_event_t event)
+void SysTick_Handler(void)
+{
+	lv_tick_inc(1);
+
+}//--------------------------------------------------------------------------------
+ void slider_event_cb(lv_obj_t * slider, lv_event_t event)
+{
+	if (event == LV_EVENT_VALUE_CHANGED) {
+	
+		lv_label_set_text_fmt(label, "%d", lv_slider_get_value(slider));
+	}
+}//--------------------------------------------------------------------------------
+
+void lv_ex_get_started_3(void)
+{
+	/* Create a slider in the center of the display */
+	 slider = lv_slider_create(lv_scr_act(), NULL);
+	lv_obj_set_width(slider, 200); /*Set the width*/
+	lv_obj_align(slider, NULL, LV_ALIGN_CENTER, 0, 0); /*Align to the center of the parent (screen)*/
+	lv_obj_set_event_cb(slider, slider_event_cb); /*Assign an event function*/
+
+	/* Create a label below the slider */
+	label = lv_label_create(lv_scr_act(), NULL);
+	lv_label_set_text(label, "0");
+	lv_obj_set_auto_realign(slider, true); /*To keep center alignment when the width of the text changes*/
+	lv_obj_align(label, slider, LV_ALIGN_OUT_BOTTOM_MID, 0, 20); /*Align below the slider*/
+}//--------------------------------------------------------------------------------
+void btn_event_cb(lv_obj_t * btn, lv_event_t event)
 {
 	if (event == LV_EVENT_CLICKED) {
 		static uint8_t cnt = 0;
@@ -283,60 +329,197 @@ static void btn_event_cb(lv_obj_t * btn, lv_event_t event)
 		lv_obj_t * label = lv_obj_get_child(btn, NULL);
 		lv_label_set_text_fmt(label, "Button: %d", cnt);
 	}
-}
-
-/**
- * Create a button with a label and react on Click event.
- */
+}//--------------------------------------------------------------------------------
 void lv_ex_get_started_1(void)
 {
 	 btn = lv_btn_create(lv_scr_act(), NULL); /*Add a button the current screen*/
-	lv_obj_set_pos(btn, 10, 10); /*Set its position*/
+	lv_obj_set_pos(btn, 0, 0); /*Set its position*/
 	lv_obj_set_size(btn, 120, 50); /*Set its size*/
 	lv_obj_set_event_cb(btn, btn_event_cb); /*Assign a callback to the button*/
 
 	lv_obj_t * label = lv_label_create(btn, NULL); /*Add a label to the button*/
 	lv_label_set_text(label, "Button"); /*Set the labels text*/
-}
-
-
+}//--------------------------------------------------------------------------------
 void tft_init(void)
-{
-	
-	static lv_color_t disp_buf1[TFT_HOR_RES * 320];
+{	
+	static lv_color_t disp_buf1[LV_HOR_RES_MAX * BUFFER_LEN];
+	//	static lv_color_t disp_buf2[LV_HOR_RES_MAX * bufferLen];
 	static lv_disp_buf_t buf;
-	lv_disp_buf_init(&buf, disp_buf1, NULL, TFT_HOR_RES * 320);
-
+	lv_disp_buf_init(&buf, disp_buf1, NULL, LV_HOR_RES_MAX * BUFFER_LEN);
+	
 	lv_disp_drv_init(&disp_drv);
-
-#if TFT_EXT_FB != 0
-	SDRAM_Init();
-#endif
-
 	disp_drv.buffer = &buf;
 	disp_drv.flush_cb = tft_flush;
 	disp_drv.monitor_cb = monitor_cb;
 	lv_disp_drv_register(&disp_drv);
+	//--------------------------------------
+	
 }//--------------------------------------------------------------------------------
+
 void tft_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p)
 {
-	//this method works but I have commented it out to try DMA version which doers not work
-CL_printMsg("| %d |" , color_p->ch);
+	
+	//this "write pixel"  method works but I have commented it out to try DMA version which doers not work
+	
+    buf_to_flush = color_p;
+	int32_t x, y;
+	uint32_t index = 0;
+	 xlen  = area->y2 - area->y1 + 1; // color will be at xlen - 1
+	x = area->x1;
+	volatile uint32_t delayy = 0;
+
+	uint32_t pixelColor = buf_to_flush->full;
+	for (y = area->y1; y <= area->y2; y++) {
+		for (x = area->x1; x <= area->x2; x++) 
+		{
+			//*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2))) = buf_to_flush->full ; 
+			//buf_to_flush++;
+			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, 2 );
+			LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush->full);
+			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
+			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
+			
+			//buf_to_flush++;
+		
+
+			//pixelColor = buf_to_flush->full;
+			 //LL_mDelay(1);
+			
+
+			
+		}
+	}		
+	lv_disp_flush_ready(&disp_drv);
+	
+	
+	
+
+	
+    //---------------| end pixel method |--------------------
+	
+	
+	/* DMA STREAM and settings work properly, DMA transfers execute properly , but I get garabe at the display
+	 * Not sure , but thew issue might be the calculation of destination address , or something,
+	 * if you notice the write pixel method , i can simply write RGB values into the proper destination
+	 * given by the calculations :  EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2))  : this is proper
+	 * destination address to put RGB value into an SDRAM location that matches the pixels location given X,Y
+	 * however the buffer used by LVGL is not a mirror of the screen so the buffer represents a rectangle on the screen
+	 * and it can be at any location , for example when a button is pressed only that small section needs to get
+	 * redrawn , so that buffer needs to be passed to SDRAM properly, given the demor project uses exact same disco board
+	 * FMC,LTDC etc... I do notunderstand why the calculations in the HAL DMA Transfer function do no work for me
+	 */
+	//---------------| DMA VERSION |-------------------------
+	//Truncate the area to the screen
+//	if(area->x2 < 0) return;
+//	if (area->y2 < 0) return;
+//	if (area->x1 > TFT_HOR_RES - 1) return;
+//	if (area->y1 > TFT_VER_RES - 1) return;
+//	
+//	
+//	int32_t act_x1 = area->x1 < 0 ? 0 : area->x1;
+//	int32_t act_y1 = area->y1 < 0 ? 0 : area->y1;
+//	int32_t act_x2 = area->x2 > TFT_HOR_RES - 1 ? TFT_HOR_RES - 1 : area->x2;
+//	int32_t act_y2 = area->y2 > TFT_VER_RES - 1 ? TFT_VER_RES - 1 : area->y2;
+//
+//
+//	x1_flush = act_x1;
+//	y1_flush = act_y1;
+//	x2_flush = act_x2;
+//	y2_fill = act_y2;
+//	y_fill_act = act_y1;
+//	buf_to_flush = color_p;
+//
+//
+//	int32_t x, y;
+//	y = area->y1;
+//	x = area->x1;
+//	
+//	//this is HAL equivalent (HAL is not included in this project )
+//	//HAL_DMA_Start_IT(&DmaHandle,	(uint32_t)buf_to_flush,	(uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush],	(x2_flush - x1_flush + 1));
+//	
+//	uint32_t yRes = (y2_fill - y_fill_act);
+//
+//	len  = (x2_flush  - x1_flush + 1)* 2 * (y2_fill - y_fill_act) ;
+//
+//	LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
+//	LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
+//	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
+
+	
+	//------------| END DMA VERSION |----------------------
+		
+}
+void DMA2_Stream0_IRQHandler(void)
+{
+	LL_DMA_ClearFlag_TC0(DMA2);
+	buf_to_flush++;
+//	y_fill_act++;
+//	
+//	if (y_fill_act > y2_fill)
+//	{
+//		lv_disp_flush_ready(&disp_drv);
+//		return;
+//	}
+//	else
+//	{
+//	
+//			buf_to_flush += x2_flush - x1_flush + 1;
+//		    LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush);
+//			//blinkLed(3, 10);
+//			len  = (x2_flush  - x1_flush + 1) *2  * (y2_fill - y_fill_act) * 2;
+//			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
+//			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x1_flush) + (240*(y_fill_act * 2)));
+//			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);	
+//		
+//	}
+	
+		
+	
+
+}
+
+void tft_flush1(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p)
+{
+	
+	//this "write pixel"  method works but I have commented it out to try DMA version which doers not work
+	/*
+
 	int32_t x, y;
 	for (y = area->y1; y <= area->y2; y++) {
 		for (x = area->x1; x <= area->x2; x++) {
-			write_pixel(x, y, color_p->ch.red, color_p->ch.green, color_p->ch.blue);
+			*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2)) ) =( color_p->ch.red<<11) | (color_p->ch.green<<5) | ( color_p->ch.blue);
 			color_p++;
 		}
 	}
-  lv_disp_flush_ready(&disp_drv);
+	
+		
+	lv_disp_flush_ready(&disp_drv);
+	
+	
+	*/
 
-	/*
+	
+    //---------------| end pixel method |--------------------
+	
+	
+	/* DMA STREAM and settings work properly, DMA transfers execute properly , but I get garabe at the display
+	 * Not sure , but thew issue might be the calculation of destination address , or something,
+	 * if you notice the write pixel method , i can simply write RGB values into the proper destination
+	 * given by the calculations :  EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2))  : this is proper
+	 * destination address to put RGB value into an SDRAM location that matches the pixels location given X,Y
+	 * however the buffer used by LVGL is not a mirror of the screen so the buffer represents a rectangle on the screen
+	 * and it can be at any location , for example when a button is pressed only that small section needs to get
+	 * redrawn , so that buffer needs to be passed to SDRAM properly, given the demor project uses exact same disco board
+	 * FMC,LTDC etc... I do notunderstand why the calculations in the HAL DMA Transfer function do no work for me
+	 */
+	//---------------| DMA VERSION |-------------------------
 	//Truncate the area to the screen
+	
 	int32_t act_x1 = area->x1 < 0 ? 0 : area->x1;
 	int32_t act_y1 = area->y1 < 0 ? 0 : area->y1;
 	int32_t act_x2 = area->x2 > TFT_HOR_RES - 1 ? TFT_HOR_RES - 1 : area->x2;
 	int32_t act_y2 = area->y2 > TFT_VER_RES - 1 ? TFT_VER_RES - 1 : area->y2;
+
 
 	x1_flush = act_x1;
 	y1_flush = act_y1;
@@ -346,46 +529,101 @@ CL_printMsg("| %d |" , color_p->ch);
 	buf_to_flush = color_p;
 
 
+	int32_t x, y;
+	y = area->y1;
+	x = area->x1;
 	
-	//this is HAL equivalent 
+	//this is HAL equivalent (HAL is not included in this project )
 	//HAL_DMA_Start_IT(&DmaHandle,	(uint32_t)buf_to_flush,	(uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush],	(x2_flush - x1_flush + 1));
 	
-	//parameters: DMAx, Stream , Destination address ...... I believe the issue is here for my code not yours. 
-	LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, (uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush]);
+	uint32_t yRes = (y2_fill - y_fill_act);
+
+	len  = (x2_flush  - x1_flush + 1) * (y2_fill - y_fill_act) * 2;
+	if (len > LEN_MAX  )
+	{
+		blinkLed(5, 10);
+		PARTIAL = true;		
+		len = len - LEN_MAX; //new len has been established with remainder, couls still be bigger then lenMAX
+		LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, LEN_MAX);
+	}
+	else
+	{
+		PARTIAL = false;
+		//blinkLed(5, 20);
+		LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
+	}
 	
-	//parameters: DMAx , Stream  , Length
-	LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, (x2_flush - x1_flush + 1));
-	
+
+
+
+	LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
+	//y_fill_act = (y2_fill - y_fill_act);
 	//start transfer
 	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-	//lv_disp_flush_ready(&disp_drv);
-		*/
+	
+
+	
+	//------------| END DMA VERSION |----------------------
+		
 }
-void DMA2_Stream0_IRQHandler(void)
+void DMA2_Stream0_IRQHandler1(void)
 {
 	LL_DMA_ClearFlag_TC0(DMA2);
-	y_fill_act++;
+	
 
-	if (y_fill_act > y2_fill) {
-		lv_disp_flush_ready(&disp_drv);
-	}
-	else {
-		buf_to_flush += x2_flush - x1_flush + 1;
-		LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, (uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush]);
-	
-		//parameters: DMAx , Stream  , Length
-		LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, (x2_flush - x1_flush + 1));
-	
-		//start transfer
-		LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-		/*##-7- Start the DMA transfer using the interrupt mode ####################*/
-		/* Configure the source, destination and buffer size DMA fields and Start DMA Stream transfer */
-		/* Enable All the DMA interrupts */
-		//if (HAL_DMA_Start_IT(han,(uint32_t)buf_to_flush,(uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush],(x2_flush - x1_flush + 1)) != HAL_OK)
-		//	while (1) ;	/*Halt on error*/
+		/*
+
+		if (y_fill_act > y2_fill)
+		{
+			lv_disp_flush_ready(&disp_drv);
+		}
+		else
+		{
+			buf_to_flush += x2_flush - x1_flush + 1;
+			len = (x2_flush - x1_flush) * 2; // * (y2_fill - y_fill_act);
+			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
+			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, (uint32_t)&my_fb[y_fill_act * TFT_HOR_RES  * 2 + x1_flush]);
+			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
+		}
+		*/
+//	
+//	
+//	if (y_fill_act > y2_fill)
+//	{
+//		lv_disp_flush_ready(&disp_drv);		
+//	}
+//	else
+//	{	
+
+		if (PARTIAL == true)
+		{
+			//len  = (x2_flush  - x1_flush) * (y2_fill - y_fill_act) * 2;
+			if (len > LEN_MAX)
+			{
+				PARTIAL = true;		
+				len = len - LEN_MAX;     //new len has been established with remainder, couls still be bigger then lenMAX
+				LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, LEN_MAX);
+			}
+			else
+			{
+				PARTIAL = false;
+				LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);    //do remanining len
+			}	
+			
+			
+			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x1_flush) + (240*(y_fill_act * 2)));
+			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);	
 		
-	}
+		}
+		else
+		{
+			lv_disp_flush_ready(&disp_drv);
 		
+		}
+	//}
+		
+	
+
 }
 void initDMA(void)
 {
@@ -393,7 +631,7 @@ void initDMA(void)
 	LL_DMA_InitTypeDef dma;
 	LL_DMA_StructInit(&dma);
 	dma.Direction = LL_DMA_DIRECTION_MEMORY_TO_MEMORY;
-	dma.PeriphOrM2MSrcAddress	= (uint32_t)&buf_to_flush;
+	dma.PeriphOrM2MSrcAddress	= (uint32_t) &buf_to_flush;
 	dma.PeriphOrM2MSrcDataSize	= LL_DMA_MDATAALIGN_HALFWORD; 
 	dma.PeriphOrM2MSrcIncMode	= LL_DMA_PERIPH_INCREMENT;
 	dma.MemoryOrM2MDstAddress	= EXTERNAL_SDRAM_BANK_ADDR;
@@ -401,9 +639,10 @@ void initDMA(void)
 	dma.MemoryOrM2MDstIncMode	= LL_DMA_MEMORY_INCREMENT;	
 	dma.FIFOMode				= LL_DMA_FIFOMODE_ENABLE;
 	dma.NbData = 255;   //uint16_t internal_buff[100]  why 200?
-	DMA2_Stream0->CR |= DMA_SxCR_TCIE;  //enable Transfer Complete interrutp
+	DMA2_Stream0->CR |= DMA_SxCR_TCIE ;     //enable Transfer Complete interrutp
 	NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-	
+	LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush->full);
+	//DMA2_Stream0->FCR |= 0x00000080U;
 	LL_DMA_Init(DMA2, LL_DMA_STREAM_0, &dma);
 }
 void write_pixel(uint16_t x, uint16_t y, uint16_t  red, uint16_t  g, uint16_t  b)
@@ -464,7 +703,7 @@ void switch_logos(void)
 	}
 	LL_mDelay(100);
 }//--------------------------------------------------------------------------------
-void LCD_AF_GPIOConfig(void)
+void ltdc_LCD_pins_config(void)
 {
 	LL_GPIO_InitTypeDef GPIO_InitStruct;  
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN |  RCC_AHB1ENR_GPIOCEN | RCC_AHB1ENR_GPIODEN |  RCC_AHB1ENR_GPIOFEN | RCC_AHB1ENR_GPIOGEN;
@@ -682,9 +921,7 @@ void LCD_ChipSelect(uint8_t state)
 }//--------------------------------------------------------------------------------
 void RCC_PLLSAIConfig(uint32_t PLLSAIN, uint32_t PLLSAIQ, uint32_t PLLSAIR)
 {
-	/* Check the parameters */
-	
-
+	//PLLSAI clock configuration 192 , 7 , 3
 	RCC->PLLSAICFGR = (PLLSAIN << 6) | (PLLSAIQ << 24) | (PLLSAIR << 28);
 }//--------------------------------------------------------------------------------
 void LCD_CtrlLinesConfig(void)
@@ -727,6 +964,9 @@ void LTDC_Config_Layer_1(void)
 	LTDC_Layer_InitStruct.LTDC_VerticalStart = 4;
 	LTDC_Layer_InitStruct.LTDC_VerticalStop = 320 + 4 - 1;         //height
   
+
+	
+	
 	
 	       
 	LTDC_Layer_InitStruct.LTDC_PixelFormat = LTDC_Pixelformat_RGB565; /* Pixel Format configuration*/    
@@ -768,93 +1008,93 @@ void LTDC_Config_Layer_1(void)
 
   
 	LTDC_LayerInit(LTDC_Layer1, &LTDC_Layer_InitStruct);
-
-	/* Layer1 Configuration end ------------------------------------------------*/
 	
 }//--------------------------------------------------------------------------------
-void LTDC_Config_Layer_2(void)
+void layer1_config(void)
 {
-	// Layer2 Configuration ----------------------------------------------------*/
-	LTDC_Layer_InitTypeDef         LTDC_Layer_InitStruct;
-  // Windowing configuration 
-  // In this case only 320x240 window of the active display area is used 
-  //to display a picture then :
-  //Horizontal start = horizontal sync + offset_x + Horizontal back porch = 30
-  //Horizontal stop = Horizontal start + offset_x + window width -1 = 30 + 240 -1 
-  //Vertical start  = vertical sync + offset_y + vertical back porch  = 160 + 4
-  //Vertical stop  = Vertical start + offset_y + window height -1  = 4 + 320 -1   
-  LTDC_Layer_InitStruct.LTDC_HorizontalStart = 30;
-  LTDC_Layer_InitStruct.LTDC_HorizontalStop = (240 + 30 - 1); 
-  LTDC_Layer_InitStruct.LTDC_VerticalStart = 160 + 4;
-  LTDC_Layer_InitStruct.LTDC_VerticalStop = (320 + 4 - 1);
-  
-  // Pixel Format configuration           
-  LTDC_Layer_InitStruct.LTDC_PixelFormat = LTDC_Pixelformat_RGB565;
-  
-  // Alpha constant configuration : The constant alpha for layer 2 is decreased 
-  //to see the layer 1 in the intersection zone
-  LTDC_Layer_InitStruct.LTDC_ConstantAlpha = 255;
-  
-  // Default Color configuration (configure A,R,G,B component values)            
-  LTDC_Layer_InitStruct.LTDC_DefaultColorBlue = 0;        
-  LTDC_Layer_InitStruct.LTDC_DefaultColorGreen = 0;       
-  LTDC_Layer_InitStruct.LTDC_DefaultColorRed = 0;         
-  LTDC_Layer_InitStruct.LTDC_DefaultColorAlpha = 0;
-  
-  // blending Factors     
-  LTDC_Layer_InitStruct.LTDC_BlendingFactor_1 = LTDC_BlendingFactor1_PAxCA;    
-  LTDC_Layer_InitStruct.LTDC_BlendingFactor_2 = LTDC_BlendingFactor2_PAxCA;
-  
-  // Configure Input Address : frame buffer is located at FLASH memory  
-  LTDC_Layer_InitStruct.LTDC_CFBStartAdress = (uint32_t)&ST_LOGO_2;
-  
-  // the length of one line of pixels in bytes + 3 then :
-  //Line Lenth = Active high width x number of bytes per pixel + 3 
-  //Active high width         = 240 
-  //number of bytes per pixel = 2    (pixel_format : RGB565)   
-  
-  LTDC_Layer_InitStruct.LTDC_CFBLineLength = ((240 * 2) + 3); 
-  LTDC_Layer_InitStruct.LTDC_CFBPitch = (240 * 2);
-  
-  //  the pitch is the increment from the start of one line of pixels to the 
-  //start of the next line in bytes, then :
-  //Pitch = Active high width x number of bytes per pixel     
-  //
-  LTDC_Layer_InitStruct.LTDC_CFBLineNumber = 160; 
-  
-  // Initialize the Layer 2//
-  LTDC_LayerInit(LTDC_Layer2, &LTDC_Layer_InitStruct);
-
-   //Layer2 Configuration end ------------------------------------------------
+	uint16_t Horizontal_Start  = 30; 
+	uint16_t Horizontal_Stop   = (240 + 30 - 1);
+	uint16_t Vertical_Start    = 4;
+	uint16_t Vertical_Stop     = (320 + 4 - 1);
+	uint8_t  PixelA_x_constA_1 = 6;
+	uint8_t  PixelA_x_constA_2 = 7;
+	//set layer Horizontal start/stop coordinates
+	LTDC_Layer1->WHPCR |= (Horizontal_Stop << LTDC_LxWHPCR_WHSPPOS_Pos) | (Horizontal_Start << LTDC_LxWHPCR_WHSTPOS_Pos);
+	//set layer Vertical start/stop coordinates
+	LTDC_Layer1->WVPCR |= (Vertical_Stop << LTDC_LxWVPCR_WVSPPOS_Pos) | (Vertical_Start << LTDC_LxWVPCR_WVSTPOS_Pos);
+	
+	LTDC_Layer1->PFCR |= (2 << LTDC_LxPFCR_PF_Pos);  //pixel format
+	//LTDC_Layer1->PFCR &= ~(7 << LTDC_LxPFCR_PF_Pos);     //pixel format
+	LTDC_Layer1->DCCR |= (0);  // default R , G, B ,  Alpha : black
+	
+	LTDC_Layer1->CACR &= ~(LTDC_LxCACR_CONSTA_Msk);   // clear
+	LTDC_Layer1->CACR |= (255 << LTDC_LxCACR_CONSTA_Pos);  // 255 max alpha value fully opauqe
+	
+	LTDC_Layer1->BFCR &= ~(LTDC_LxBFCR_BF1_Msk | LTDC_LxBFCR_BF2_Msk);   //blending factors
+	LTDC_Layer1->BFCR |= (PixelA_x_constA_1 << LTDC_LxBFCR_BF1_Pos) | (PixelA_x_constA_2 << LTDC_LxBFCR_BF2_Pos);  //blending factors
+	
+	LTDC_Layer1->CFBAR = (uint32_t)EXTERNAL_SDRAM_BANK_ADDR;  //buffer start address
+	
+	//Line pitch
+	uint16_t Line_Length = ((240 * 2) + 3); 
+	uint16_t Pitch       = (240 * 2); 
+	LTDC_Layer1->CFBLR |= (Line_Length << LTDC_LxCFBLR_CFBLL_Pos) | (Pitch << LTDC_LxCFBLR_CFBP_Pos);
+	
+	LTDC_Layer1->CFBLNR  &= ~(LTDC_LxCFBLNR_CFBLNBR);
+	LTDC_Layer1->CFBLNR  |= (320 << LTDC_LxCFBLNR_CFBLNBR_Pos);
 }
-void LCD_Config(void)
+void layer2_config(void)
 {
-	LL_GPIO_InitTypeDef  GPIO_InitStructure;
-  
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
-  
-  
-	/* Configure the LCD Control pins , SPI stuff to initialize the LCD*/
+	uint16_t Horizontal_Start  = 30; 
+	uint16_t Horizontal_Stop   = (240 + 30 - 1);
+	uint16_t Vertical_Start    = 160;
+	uint16_t Vertical_Stop     = (320 + 4 - 1);
+	uint8_t  PixelA_x_constA_1 = 6;
+	uint8_t  PixelA_x_constA_2 = 7;
+	//set layer Horizontal start/stop coordinates
+	LTDC_Layer1->WHPCR |= (Horizontal_Stop << LTDC_LxWHPCR_WHSPPOS_Pos) | (Horizontal_Start << LTDC_LxWHPCR_WHSTPOS_Pos);
+	//set layer Vertical start/stop coordinates
+	LTDC_Layer1->WVPCR |= (Vertical_Stop << LTDC_LxWVPCR_WVSPPOS_Pos) | (Vertical_Start << LTDC_LxWVPCR_WVSTPOS_Pos);
+	
+	LTDC_Layer1->PFCR |= (2 << LTDC_LxPFCR_PF_Pos);   //pixel format
+	LTDC_Layer1->DCCR |= (0);   // default R , G, B ,  Alpha : black
+	
+	LTDC_Layer1->CACR &= ~(LTDC_LxCACR_CONSTA_Msk);    // clear
+	LTDC_Layer1->CACR |= (255 << LTDC_LxCACR_CONSTA_Pos);   // 255 max alpha value fully opauqe
+	
+	LTDC_Layer1->BFCR &= ~(LTDC_LxBFCR_BF1_Msk | LTDC_LxBFCR_BF2_Msk);    //blending factors
+	LTDC_Layer1->BFCR |= (PixelA_x_constA_1 << LTDC_LxBFCR_BF1_Pos) | (PixelA_x_constA_2 << LTDC_LxBFCR_BF2_Pos);   //blending factors
+	
+	LTDC_Layer1->CFBAR = (uint32_t)&ST_LOGO_2;    //buffer start address
+	
+	//Line pitch
+	uint16_t Line_Length = ((240 * 2) + 3); 
+	uint16_t Pitch       = (240 * 2); 
+	LTDC_Layer1->CFBLR |= (Line_Length << LTDC_LxCFBLR_CFBLL_Pos) | (Pitch << LTDC_LxCFBLR_CFBP_Pos);
+	
+	//number of lines in this layer : effective layer height
+	LTDC_Layer1->CFBLNR  &= ~(LTDC_LxCFBLNR_CFBLNBR);
+	LTDC_Layer1->CFBLNR  |= (160 << LTDC_LxCFBLNR_CFBLNBR_Pos);
+}
+void lcd_init(void)
+{
+	// Configure the LCD Control pins , SPI stuff to initialize the LCD
 	LCD_CtrlLinesConfig();
 	LCD_ChipSelect(DISABLE);
 	LCD_ChipSelect(ENABLE);
 	LCD_SPIConfig(); 	
-	LCD_PowerOn(); //spi commands
-	
-
-	//-----------------------------------| DMA2D and SDRAM not used in this example |-------+
-	/* Enable the DMA2D Clock */                                                          //|
-	//RCC->AHB1ENR |= RCC_AHB1ENR_DMA2DEN;                                                //|
-  	/* Configure the FMC Parallel interface : SDRAM is used as Frame Buffer for LCD */    //|
-	//init_SDRAM();                                                                       //|
-	//--------------------------------------------------------------------------------------+
-	/* Enable the LTDC Clock */
+	LCD_PowerOn();   //spi commands
+}
+void ltdc_config(void)
+{
+	// Enable the LTDC Clock 
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN; 	
 	RCC->APB2ENR |= RCC_APB2ENR_LTDCEN;
   
 
 
 	/* Configure the LCD Control pins : RGB , Hsynch , Vsynch , CLK , DE */
-	LCD_AF_GPIOConfig();  
+	ltdc_LCD_pins_config();  
 
 	
 
@@ -867,93 +1107,37 @@ void LCD_Config(void)
 	/* PLLSAI_VCO Output = PLLSAI_VCO Input * PLLSAI_N = 192 Mhz */
 	/* PLLLCDCLK = PLLSAI_VCO Output/PLLSAI_R = 192/3 = 64 Mhz */
 	/* LTDC clock frequency = PLLLCDCLK / RCC_PLLSAIDivR = 64/8 = 8 Mhz */
-	RCC_PLLSAIConfig(192, 7, 3); //RM0090-PG206
+	RCC_PLLSAIConfig(200, 7, 3);  //RM0090-PG206 NQR
 	
 	//RCC_LTDCCLKDivConfig(RCC_PLLSAIDivR_Div8); RM0090-PG208
 	RCC->DCKCFGR &= ~(RCC_DCKCFGR_PLLSAIDIVR);
-	RCC->DCKCFGR |=( 0x02<<RCC_DCKCFGR_PLLSAIDIVR_Pos);
+	RCC->DCKCFGR |= (0x02 << RCC_DCKCFGR_PLLSAIDIVR_Pos);
 	
 	/* Enable PLLSAI Clock */
 	RCC->CR |= RCC_CR_PLLSAION;
 	/* Wait for PLLSAI activation */
-	while ( !(RCC->CR & RCC_CR_PLLSAIRDY ) )
+	while (!(RCC->CR & RCC_CR_PLLSAIRDY))
 	{
 	}
   
-	/* LTDC Initialization -----------------------------------------------------*/
-	LTDC_InitTypeDef    LTDC_InitStruct;
-	
-	LTDC_InitStruct.LTDC_HSPolarity = LTDC_HSPolarity_AL; /* Initialize the horizontal synchronization polarity as active low*/    	
-	LTDC_InitStruct.LTDC_VSPolarity = LTDC_VSPolarity_AL; /* Initialize the vertical synchronization polarity as active low */     	
-	LTDC_InitStruct.LTDC_DEPolarity = LTDC_DEPolarity_AL; /* Initialize the data enable polarity as active low */     	
-	LTDC_InitStruct.LTDC_PCPolarity = LTDC_PCPolarity_IPC;/* Initialize the pixel clock polarity as input pixel clock */ 
-  
-	/* Timing configuration , all settings are "minus 1" per the datasheet */	    
-	LTDC_InitStruct.LTDC_HorizontalSync	=  9;		/* Configure horizontal synchronization width */ 	
-	LTDC_InitStruct.LTDC_VerticalSync	=  1;		/* Configure vertical synchronization height */	
-	LTDC_InitStruct.LTDC_AccumulatedHBP = 29;		/* Configure accumulated horizontal back porch */	
-	LTDC_InitStruct.LTDC_AccumulatedVBP =  3;		/* Configure accumulated vertical back porch */	
-	LTDC_InitStruct.LTDC_AccumulatedActiveW = 269;	/* Configure accumulated active width */  	
-	LTDC_InitStruct.LTDC_AccumulatedActiveH = 323;	/* Configure accumulated active height */	
-	LTDC_InitStruct.LTDC_TotalWidth = 279;			/* Configure total width */	
-	LTDC_InitStruct.LTDC_TotalHeigh = 327;			/* Configure total height */  
-  
-	
-	
-	/* Configure R,G,B component values for LCD background color */                   
-	LTDC_InitStruct.LTDC_BackgroundRedValue		=  255;            
-	LTDC_InitStruct.LTDC_BackgroundGreenValue	=  165;          
-	LTDC_InitStruct.LTDC_BackgroundBlueValue	=    0;
-  
-	LTDC_Init(&LTDC_InitStruct);
 
-	/* LTDC initialization end -------------------------------------------------*/
- 
+	// LTDC initialization end -------------------------------------------------
+	LTDC->SSCR |= (9 << LTDC_SSCR_HSW_Pos) | (1 << LTDC_SSCR_VSH_Pos);   //set Hsynch Vsycnh
+	LTDC->BPCR |= (29 << LTDC_BPCR_AHBP_Pos) | (3 << LTDC_BPCR_AVBP_Pos);  //set accumulated fron/back porch
+	LTDC->AWCR |= (269 << LTDC_AWCR_AAW_Pos) | (323 << LTDC_AWCR_AAH_Pos);   //set accumulated active areas
+	LTDC->TWCR |= (279 << LTDC_TWCR_TOTALW_Pos) | (327 << LTDC_TWCR_TOTALH_Pos);   //set total widths
+
+	//set (horizontal/vertical/data enalbe / clock) all polarities to active low
+	LTDC->GCR  &= ~((1 << LTDC_GCR_HSPOL_Pos) | (1 << LTDC_GCR_VSPOL_Pos) | (1 << LTDC_GCR_DEPOL_Pos) | (1 << LTDC_GCR_PCPOL_Pos));
+
+	uint8_t red = 0;
+	uint8_t green = 0;
+	uint8_t blue = 255;
+	//set background color
+	LTDC->BCCR |= (red << LTDC_BCCR_BCRED_Pos) | (green << LTDC_BCCR_BCGREEN_Pos) | (blue << LTDC_BCCR_BCBLUE_Pos);
 	//LTDC_DitherCmd(ENABLE);
+}
 
-}//--------------------------------------------------------------------------------
-void LTDC_Init2(LTDC_InitTypeDef* LTDC_InitStruct)
-{
-	uint32_t horizontalsync = 0;
-	uint32_t accumulatedHBP = 0;
-	uint32_t accumulatedactiveW = 0;
-	uint32_t totalwidth = 0;
-	uint32_t backgreen = 0;
-	uint32_t backred = 0;
-	
-	/* Sets Synchronization size */
-	LTDC->SSCR &= ~(LTDC_SSCR_VSH | LTDC_SSCR_HSW);
-	horizontalsync = (LTDC_InitStruct->LTDC_HorizontalSync << 16);
-	LTDC->SSCR |= (horizontalsync | LTDC_InitStruct->LTDC_VerticalSync);
-
-	/* Sets Accumulated Back porch */
-	LTDC->BPCR &= ~(LTDC_BPCR_AVBP | LTDC_BPCR_AHBP);
-	accumulatedHBP = (LTDC_InitStruct->LTDC_AccumulatedHBP << 16);
-	LTDC->BPCR |= (accumulatedHBP | LTDC_InitStruct->LTDC_AccumulatedVBP);
-	/* Sets Accumulated Active Width */
-	LTDC->AWCR &= ~(LTDC_AWCR_AAH | LTDC_AWCR_AAW);
-	accumulatedactiveW = (LTDC_InitStruct->LTDC_AccumulatedActiveW << 16);
-	LTDC->AWCR |= (accumulatedactiveW | LTDC_InitStruct->LTDC_AccumulatedActiveH);
-
-	/* Sets Total Width */
-	LTDC->TWCR &= ~(LTDC_TWCR_TOTALH | LTDC_TWCR_TOTALW);
-	totalwidth = (LTDC_InitStruct->LTDC_TotalWidth << 16);
-	LTDC->TWCR |= (totalwidth | LTDC_InitStruct->LTDC_TotalHeigh);
-
-	LTDC->GCR &= (uint32_t)GCR_MASK;
-	LTDC->GCR |=  (uint32_t)(LTDC_InitStruct->LTDC_HSPolarity | LTDC_InitStruct->LTDC_VSPolarity | \
-	                         LTDC_InitStruct->LTDC_DEPolarity | LTDC_InitStruct->LTDC_PCPolarity);
-
-	/* sets the background color value */
-	backgreen = (LTDC_InitStruct->LTDC_BackgroundGreenValue << 8);
-	backred = (LTDC_InitStruct->LTDC_BackgroundRedValue << 16);
-
-	LTDC->BCCR &= ~(LTDC_BCCR_BCBLUE | LTDC_BCCR_BCGREEN | LTDC_BCCR_BCRED);
-	LTDC->BCCR |= (backred | backgreen | LTDC_InitStruct->LTDC_BackgroundBlueValue);
-	
-	
-	
-}//--------------------------------------------------------------------------------
 void memCheck(void)
 {
 	uint8_t ubWritedata_8b = 0x3C, ubReaddata_8b = 0;  
@@ -1246,10 +1430,8 @@ void setClockTo180(void)
 
 	if (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_5)
 	{
-	//	Error_Handler();  
+		//Error_Handler();  
 	}
-	
-	
 	LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
 	LL_PWR_EnableOverDriveMode();
 	LL_RCC_HSE_Enable();
@@ -1260,6 +1442,7 @@ void setClockTo180(void)
     
 	}
 	LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSE, LL_RCC_PLLM_DIV_4, 180, LL_RCC_PLLP_DIV_2);
+	LL_RCC_PLLSAI_ConfigDomain_LTDC(LL_RCC_PLLSOURCE_HSE, LL_RCC_PLLSAIM_DIV_4, 56, LL_RCC_PLLSAIR_DIV_7, LL_RCC_PLLSAIDIVR_DIV_2);
 	LL_RCC_PLL_Enable();
 
 	/* Wait till PLL is ready */
@@ -1267,8 +1450,13 @@ void setClockTo180(void)
 	{
     
 	}
-	
-	
+	LL_RCC_PLLSAI_Enable();
+
+	/* Wait till PLL is ready */
+	while (LL_RCC_PLLSAI_IsReady() != 1)
+	{
+    
+	}
 	LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
 	LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_4);
 	LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_2);
@@ -1279,8 +1467,6 @@ void setClockTo180(void)
 	{
   
 	}
-	LL_Init1msTick(180000000);
-	LL_SYSTICK_SetClkSource(LL_SYSTICK_CLKSOURCE_HCLK);
 	LL_SetSystemCoreClock(180000000);
 	LL_RCC_SetTIMPrescaler(LL_RCC_TIM_PRESCALER_TWICE);
 }//--------------------------------------------------------------------------------
