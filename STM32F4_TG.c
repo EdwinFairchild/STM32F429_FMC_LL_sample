@@ -135,6 +135,7 @@
 #define DISABLE !ENABLE
 
 //LVLG VARIABLES
+bool	TRANSFERCOMPLETE = false; 
 static lv_disp_drv_t disp_drv;
 static int32_t x1_flush;
 static int32_t y1_flush;
@@ -172,7 +173,7 @@ uint32_t totop = 0;
 lv_obj_t * btn;
 lv_obj_t * label;
 lv_obj_t * slider;
-
+int32_t x, y;
 //---------| Prototypes |---------
 
 //LVGL
@@ -243,7 +244,12 @@ int main(void)
 
 	//DMA
 	initDMA();
-	
+//	LL_DMA_SetDataTransferDirection(DMA2, LL_DMA_STREAM_0, LL_DMA_DIRECTION_MEMORY_TO_MEMORY);
+//			
+//	LL_DMA_SetPeriphSize(DMA2, LL_DMA_STREAM_0, LL_DMA_PDATAALIGN_HALFWORD);
+//	LL_DMA_SetMemorySize(DMA2, LL_DMA_STREAM_0, LL_DMA_MDATAALIGN_HALFWORD);
+//	LL_DMA_SetMemoryIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_MEMORY_INCREMENT);
+//	LL_DMA_SetPeriphIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_PERIPH_INCREMENT);
 	//LCD/LTDC
 	 
 	lcd_init();
@@ -258,33 +264,33 @@ int main(void)
 	lv_init();
 	tft_init();
 	//lv_demo_widgets();
-	//lv_demo_stress();
-	lv_ex_get_started_1();
-	lv_ex_get_started_3();
+	lv_demo_stress();
+	//lv_ex_get_started_1();
+	//lv_ex_get_started_3();
 	uint8_t sliderState, sliderVal = 0;
 	char buffer[3];
 //	CL_printMsg("Everything inited\n");
 	for (;;)
 	{
 		
-		if (sliderVal == 100)
-			sliderState = 0;
-		
-		if (sliderVal == 0)
-			sliderState = 1;
-		
-		if (sliderState == 1)
-			lv_slider_set_value(slider, sliderVal++, LV_ANIM_ON);
-		else
-			lv_slider_set_value(slider, sliderVal--, LV_ANIM_ON);
-		
-		
-		
-		slider_event_cb(slider, LV_EVENT_VALUE_CHANGED);
+//		if (sliderVal == 100)
+//			sliderState = 0;
+//		
+//		if (sliderVal == 0)
+//			sliderState = 1;
+//		
+//		if (sliderState == 1)
+//			lv_slider_set_value(slider, sliderVal++, LV_ANIM_ON);
+//		else
+//			lv_slider_set_value(slider, sliderVal--, LV_ANIM_ON);
+//		
+//		
+//		
+//		slider_event_cb(slider, LV_EVENT_VALUE_CHANGED);
 			
 			
 		lv_task_handler();
-		LL_mDelay(1);
+	//	LL_mDelay(1);
 		//switch_logos();
 
 	
@@ -358,168 +364,16 @@ void tft_init(void)
 
 void tft_flush(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p)
 {
-	
-	//this "write pixel"  method works but I have commented it out to try DMA version which doers not work
-	
-    buf_to_flush = color_p;
-	int32_t x, y;
-	uint32_t index = 0;
-	 xlen  = area->y2 - area->y1 + 1; // color will be at xlen - 1
-	x = area->x1;
-	volatile uint32_t delayy = 0;
+	if (area->x2 < 0) return;
+	if (area->y2 < 0) return;
+	if (area->x1 > TFT_HOR_RES - 1) return;
+	if (area->y1 > TFT_VER_RES - 1) return;
 
-	uint32_t pixelColor = buf_to_flush->full;
-	for (y = area->y1; y <= area->y2; y++) {
-		for (x = area->x1; x <= area->x2; x++) 
-		{
-			//*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2))) = buf_to_flush->full ; 
-			//buf_to_flush++;
-			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, 2 );
-			LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush->full);
-			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
-			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-			
-			//buf_to_flush++;
-		
-
-			//pixelColor = buf_to_flush->full;
-			 //LL_mDelay(1);
-			
-
-			
-		}
-	}		
-	lv_disp_flush_ready(&disp_drv);
-	
-	
-	
-
-	
-    //---------------| end pixel method |--------------------
-	
-	
-	/* DMA STREAM and settings work properly, DMA transfers execute properly , but I get garabe at the display
-	 * Not sure , but thew issue might be the calculation of destination address , or something,
-	 * if you notice the write pixel method , i can simply write RGB values into the proper destination
-	 * given by the calculations :  EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2))  : this is proper
-	 * destination address to put RGB value into an SDRAM location that matches the pixels location given X,Y
-	 * however the buffer used by LVGL is not a mirror of the screen so the buffer represents a rectangle on the screen
-	 * and it can be at any location , for example when a button is pressed only that small section needs to get
-	 * redrawn , so that buffer needs to be passed to SDRAM properly, given the demor project uses exact same disco board
-	 * FMC,LTDC etc... I do notunderstand why the calculations in the HAL DMA Transfer function do no work for me
-	 */
-	//---------------| DMA VERSION |-------------------------
-	//Truncate the area to the screen
-//	if(area->x2 < 0) return;
-//	if (area->y2 < 0) return;
-//	if (area->x1 > TFT_HOR_RES - 1) return;
-//	if (area->y1 > TFT_VER_RES - 1) return;
-//	
-//	
-//	int32_t act_x1 = area->x1 < 0 ? 0 : area->x1;
-//	int32_t act_y1 = area->y1 < 0 ? 0 : area->y1;
-//	int32_t act_x2 = area->x2 > TFT_HOR_RES - 1 ? TFT_HOR_RES - 1 : area->x2;
-//	int32_t act_y2 = area->y2 > TFT_VER_RES - 1 ? TFT_VER_RES - 1 : area->y2;
-//
-//
-//	x1_flush = act_x1;
-//	y1_flush = act_y1;
-//	x2_flush = act_x2;
-//	y2_fill = act_y2;
-//	y_fill_act = act_y1;
-//	buf_to_flush = color_p;
-//
-//
-//	int32_t x, y;
-//	y = area->y1;
-//	x = area->x1;
-//	
-//	//this is HAL equivalent (HAL is not included in this project )
-//	//HAL_DMA_Start_IT(&DmaHandle,	(uint32_t)buf_to_flush,	(uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush],	(x2_flush - x1_flush + 1));
-//	
-//	uint32_t yRes = (y2_fill - y_fill_act);
-//
-//	len  = (x2_flush  - x1_flush + 1)* 2 * (y2_fill - y_fill_act) ;
-//
-//	LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
-//	LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
-//	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-
-	
-	//------------| END DMA VERSION |----------------------
-		
-}
-void DMA2_Stream0_IRQHandler(void)
-{
-	LL_DMA_ClearFlag_TC0(DMA2);
-	buf_to_flush++;
-//	y_fill_act++;
-//	
-//	if (y_fill_act > y2_fill)
-//	{
-//		lv_disp_flush_ready(&disp_drv);
-//		return;
-//	}
-//	else
-//	{
-//	
-//			buf_to_flush += x2_flush - x1_flush + 1;
-//		    LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush);
-//			//blinkLed(3, 10);
-//			len  = (x2_flush  - x1_flush + 1) *2  * (y2_fill - y_fill_act) * 2;
-//			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
-//			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x1_flush) + (240*(y_fill_act * 2)));
-//			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);	
-//		
-//	}
-	
-		
-	
-
-}
-
-void tft_flush1(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_p)
-{
-	
-	//this "write pixel"  method works but I have commented it out to try DMA version which doers not work
-	/*
-
-	int32_t x, y;
-	for (y = area->y1; y <= area->y2; y++) {
-		for (x = area->x1; x <= area->x2; x++) {
-			*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2)) ) =( color_p->ch.red<<11) | (color_p->ch.green<<5) | ( color_p->ch.blue);
-			color_p++;
-		}
-	}
-	
-		
-	lv_disp_flush_ready(&disp_drv);
-	
-	
-	*/
-
-	
-    //---------------| end pixel method |--------------------
-	
-	
-	/* DMA STREAM and settings work properly, DMA transfers execute properly , but I get garabe at the display
-	 * Not sure , but thew issue might be the calculation of destination address , or something,
-	 * if you notice the write pixel method , i can simply write RGB values into the proper destination
-	 * given by the calculations :  EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2))  : this is proper
-	 * destination address to put RGB value into an SDRAM location that matches the pixels location given X,Y
-	 * however the buffer used by LVGL is not a mirror of the screen so the buffer represents a rectangle on the screen
-	 * and it can be at any location , for example when a button is pressed only that small section needs to get
-	 * redrawn , so that buffer needs to be passed to SDRAM properly, given the demor project uses exact same disco board
-	 * FMC,LTDC etc... I do notunderstand why the calculations in the HAL DMA Transfer function do no work for me
-	 */
-	//---------------| DMA VERSION |-------------------------
-	//Truncate the area to the screen
-	
+	/*Truncate the area to the screen*/
 	int32_t act_x1 = area->x1 < 0 ? 0 : area->x1;
 	int32_t act_y1 = area->y1 < 0 ? 0 : area->y1;
 	int32_t act_x2 = area->x2 > TFT_HOR_RES - 1 ? TFT_HOR_RES - 1 : area->x2;
 	int32_t act_y2 = area->y2 > TFT_VER_RES - 1 ? TFT_VER_RES - 1 : area->y2;
-
 
 	x1_flush = act_x1;
 	y1_flush = act_y1;
@@ -528,50 +382,55 @@ void tft_flush1(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_
 	y_fill_act = act_y1;
 	buf_to_flush = color_p;
 
-
 	int32_t x, y;
-	y = area->y1;
+	uint32_t index = 0;
+	xlen  = x2_flush - x1_flush + 1;     // color will be at xlen - 1
 	x = area->x1;
-	
-	//this is HAL equivalent (HAL is not included in this project )
-	//HAL_DMA_Start_IT(&DmaHandle,	(uint32_t)buf_to_flush,	(uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush],	(x2_flush - x1_flush + 1));
-	
-	uint32_t yRes = (y2_fill - y_fill_act);
+	volatile uint32_t delayy = 0;
 
-	len  = (x2_flush  - x1_flush + 1) * (y2_fill - y_fill_act) * 2;
-	if (len > LEN_MAX  )
+	
+	for (y = area->y1; y <= area->y2; y++) 
 	{
-		blinkLed(5, 10);
-		PARTIAL = true;		
-		len = len - LEN_MAX; //new len has been established with remainder, couls still be bigger then lenMAX
-		LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, LEN_MAX);
-	}
-	else
-	{
-		PARTIAL = false;
-		//blinkLed(5, 20);
-		LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
-	}
+	//	for (x = area->x1; x <= area->x2; x++) 
+	//	{
+			//*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2))) = buf_to_flush->full ; 
+			//buf_to_flush++;
+		  		
+		    TRANSFERCOMPLETE = false;
+			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0,  xlen );
+			LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) buf_to_flush);   //ony works with :  buf_to_flush->full
+			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + ((2*x1_flush) + (240*(y * 2))));
+			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
+			while (TRANSFERCOMPLETE == false)
+			{
+				//delayy++;
+			}
+			
+	//	}
+	}		
+	lv_disp_flush_ready(&disp_drv);
+	
 	
 
-
-
-	LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2)));
-	//y_fill_act = (y2_fill - y_fill_act);
-	//start transfer
-	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-	
-
-	
-	//------------| END DMA VERSION |----------------------
-		
 }
+void DMA2_Stream0_IRQHandler(void)
+{
+	LL_DMA_ClearFlag_TC0(DMA2);
+	//buf_to_flush += x2_flush - x1_flush + 1;
+	buf_to_flush += xlen;
+	TRANSFERCOMPLETE = true;
+
+	
+
+}
+
+
 void DMA2_Stream0_IRQHandler1(void)
 {
 	LL_DMA_ClearFlag_TC0(DMA2);
 	
-
-		/*
+	y_fill_act++;
+		
 
 		if (y_fill_act > y2_fill)
 		{
@@ -580,47 +439,22 @@ void DMA2_Stream0_IRQHandler1(void)
 		else
 		{
 			buf_to_flush += x2_flush - x1_flush + 1;
-			len = (x2_flush - x1_flush) * 2; // * (y2_fill - y_fill_act);
-			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);
-			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, (uint32_t)&my_fb[y_fill_act * TFT_HOR_RES  * 2 + x1_flush]);
+			len = (x2_flush - x1_flush + 1)  ; // * (y2_fill - y_fill_act);
+			LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush);
+			LL_DMA_SetPeriphSize(DMA2, LL_DMA_STREAM_0, LL_DMA_PDATAALIGN_HALFWORD);
+			LL_DMA_SetPeriphIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_PERIPH_INCREMENT);
+	
+			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, (uint32_t)&my_fb[y_fill_act * TFT_HOR_RES + x1_flush]);
+			LL_DMA_SetMemorySize(DMA2, LL_DMA_STREAM_0, LL_DMA_MDATAALIGN_HALFWORD);
+			LL_DMA_SetMemoryIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_MEMORY_INCREMENT);
+
+	
+	
+			//parameters: DMAx , Stream  , Length
+			LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, (x2_flush - x1_flush + 1) * 2);
+			//start transfer
 			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
 		}
-		*/
-//	
-//	
-//	if (y_fill_act > y2_fill)
-//	{
-//		lv_disp_flush_ready(&disp_drv);		
-//	}
-//	else
-//	{	
-
-		if (PARTIAL == true)
-		{
-			//len  = (x2_flush  - x1_flush) * (y2_fill - y_fill_act) * 2;
-			if (len > LEN_MAX)
-			{
-				PARTIAL = true;		
-				len = len - LEN_MAX;     //new len has been established with remainder, couls still be bigger then lenMAX
-				LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, LEN_MAX);
-			}
-			else
-			{
-				PARTIAL = false;
-				LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, len);    //do remanining len
-			}	
-			
-			
-			LL_DMA_SetM2MDstAddress(DMA2, LL_DMA_STREAM_0, EXTERNAL_SDRAM_BANK_ADDR + (2*x1_flush) + (240*(y_fill_act * 2)));
-			LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);	
-		
-		}
-		else
-		{
-			lv_disp_flush_ready(&disp_drv);
-		
-		}
-	//}
 		
 	
 
@@ -630,18 +464,20 @@ void initDMA(void)
 	RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
 	LL_DMA_InitTypeDef dma;
 	LL_DMA_StructInit(&dma);
+	
 	dma.Direction = LL_DMA_DIRECTION_MEMORY_TO_MEMORY;
 	dma.PeriphOrM2MSrcAddress	= (uint32_t) &buf_to_flush;
-	dma.PeriphOrM2MSrcDataSize	= LL_DMA_MDATAALIGN_HALFWORD; 
+	dma.PeriphOrM2MSrcDataSize	= LL_DMA_PDATAALIGN_HALFWORD; 
 	dma.PeriphOrM2MSrcIncMode	= LL_DMA_PERIPH_INCREMENT;
 	dma.MemoryOrM2MDstAddress	= EXTERNAL_SDRAM_BANK_ADDR;
 	dma.MemoryOrM2MDstDataSize	= LL_DMA_MDATAALIGN_HALFWORD;
 	dma.MemoryOrM2MDstIncMode	= LL_DMA_MEMORY_INCREMENT;	
 	dma.FIFOMode				= LL_DMA_FIFOMODE_ENABLE;
+	dma.Mode					= LL_DMA_MODE_NORMAL; 
 	dma.NbData = 255;   //uint16_t internal_buff[100]  why 200?
 	DMA2_Stream0->CR |= DMA_SxCR_TCIE ;     //enable Transfer Complete interrutp
 	NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-	LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush->full);
+	//LL_DMA_SetM2MSrcAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) &buf_to_flush->full);
 	//DMA2_Stream0->FCR |= 0x00000080U;
 	LL_DMA_Init(DMA2, LL_DMA_STREAM_0, &dma);
 }
@@ -651,7 +487,7 @@ void write_pixel(uint16_t x, uint16_t y, uint16_t  red, uint16_t  g, uint16_t  b
 	//this should be implemneted with DMA at the very least
 
 	//(2*x)+(240*(y*2)) <-- neccesarry so that that the color value goes into the correct pixel corresponding to x,y
-	*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x)+(240*(y*2)) ) = (uint16_t)( (red<<11) | (g<<5) | b);
+	*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + (2*x) + (240*(y * 2))) = (uint16_t)( (red<<11) | (g<<5) | b);
 	
 	
 	
@@ -675,7 +511,7 @@ void clear_SDRAM(uint16_t value)
 {
 	for (int counter = 0x00; counter < EXTERNAL_SDRAM_SIZE; counter++)
 	{
-		*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + counter) = (uint16_t)0x0000;
+		*(__IO uint16_t*)(EXTERNAL_SDRAM_BANK_ADDR + counter) = (uint16_t)value;
 	}
 }//--------------------------------------------------------------------------------
 void switch_logos(void)
@@ -1033,7 +869,7 @@ void layer1_config(void)
 	LTDC_Layer1->BFCR &= ~(LTDC_LxBFCR_BF1_Msk | LTDC_LxBFCR_BF2_Msk);   //blending factors
 	LTDC_Layer1->BFCR |= (PixelA_x_constA_1 << LTDC_LxBFCR_BF1_Pos) | (PixelA_x_constA_2 << LTDC_LxBFCR_BF2_Pos);  //blending factors
 	
-	LTDC_Layer1->CFBAR = (uint32_t)EXTERNAL_SDRAM_BANK_ADDR;  //buffer start address
+	LTDC_Layer1->CFBAR = (uint32_t)EXTERNAL_SDRAM_BANK_ADDR;  //frame buffer start address
 	
 	//Line pitch
 	uint16_t Line_Length = ((240 * 2) + 3); 
